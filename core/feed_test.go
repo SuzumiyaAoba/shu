@@ -52,6 +52,33 @@ const testRSSFeed = `<?xml version="1.0" encoding="UTF-8"?>
   </channel>
 </rss>`
 
+func TestUserAgentHeader(t *testing.T) {
+	var gotUA string
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		w.Header().Set("Content-Type", "application/rss+xml")
+		io.WriteString(w, testRSSFeed)
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	s, _ := store.NewSQLiteStore(":memory:")
+	defer s.Close()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	svc := core.New(s, logger)
+	// Don't call SetHTTPClient - use the default client with User-Agent transport
+
+	// The default client has User-Agent transport but uses http.DefaultTransport,
+	// which won't route to our test server. We need to wrap the test server's transport.
+	testClient := ts.Client()
+	svc.SetHTTPClientWithUserAgent(testClient)
+
+	_, _ = svc.AddFeed(context.Background(), ts.URL+"/feed.xml", "")
+	if gotUA != "shu/0.1" {
+		t.Errorf("User-Agent = %q, want %q", gotUA, "shu/0.1")
+	}
+}
+
 func TestAddFeed(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
