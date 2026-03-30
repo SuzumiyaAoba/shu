@@ -8,16 +8,39 @@ import (
 	"time"
 
 	"github.com/SuzumiyaAoba/shu/core"
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // Register the pure-Go SQLite driver.
 )
 
+// initSQL contains the DDL statements for creating the feeds and entries tables.
+// It is embedded at compile time from the migrations directory so that the
+// binary is fully self-contained and no external migration files are needed.
+//
 //go:embed migrations/001_init.sql
 var initSQL string
 
+// SQLiteStore implements [Store] using a SQLite database via the pure-Go
+// modernc.org/sqlite driver (no CGo required).
+//
+// On initialization it enables WAL journal mode for better read concurrency,
+// turns on foreign key enforcement (required for ON DELETE CASCADE), and
+// applies the embedded schema migrations.
 type SQLiteStore struct {
 	db *sql.DB
 }
 
+// NewSQLiteStore opens (or creates) a SQLite database at the given DSN and
+// returns a ready-to-use [SQLiteStore].
+//
+// The DSN is typically a file path (e.g. "/home/user/.shu/shu.db") or the
+// special value ":memory:" for an in-memory database used in tests.
+//
+// Initialization steps:
+//  1. Open the database connection.
+//  2. Enable WAL journal mode for improved concurrent read performance.
+//  3. Enable foreign key constraint enforcement (SQLite disables it by default).
+//  4. Execute the embedded schema migration SQL.
+//
+// If any step fails, the database is closed and an error is returned.
 func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
@@ -41,10 +64,15 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 	return &SQLiteStore{db: db}, nil
 }
 
+// Close closes the underlying database connection pool.
 func (s *SQLiteStore) Close() error {
 	return s.db.Close()
 }
 
+// AddFeed inserts a new feed row. On success the feed's ID is set to the
+// auto-generated primary key and AddedAt is set to the current UTC time.
+// Returns an error if a feed with the same URL already exists (UNIQUE
+// constraint violation).
 func (s *SQLiteStore) AddFeed(ctx context.Context, feed *core.Feed) error {
 	now := time.Now().UTC()
 	result, err := s.db.ExecContext(ctx,
@@ -63,6 +91,8 @@ func (s *SQLiteStore) AddFeed(ctx context.Context, feed *core.Feed) error {
 	return nil
 }
 
+// GetFeed retrieves a single feed by its primary key.
+// Returns a "scan feed" error wrapping sql.ErrNoRows if the ID does not exist.
 func (s *SQLiteStore) GetFeed(ctx context.Context, id int64) (*core.Feed, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, url, title, site_url, added_at, fetched_at FROM feeds WHERE id = ?`, id,
@@ -70,6 +100,8 @@ func (s *SQLiteStore) GetFeed(ctx context.Context, id int64) (*core.Feed, error)
 	return scanFeed(row)
 }
 
+// ListFeeds returns all registered feeds ordered by ascending ID.
+// Returns an empty (non-nil) slice if no feeds are registered.
 func (s *SQLiteStore) ListFeeds(ctx context.Context) ([]*core.Feed, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, url, title, site_url, added_at, fetched_at FROM feeds ORDER BY id`,
@@ -90,6 +122,9 @@ func (s *SQLiteStore) ListFeeds(ctx context.Context) ([]*core.Feed, error) {
 	return feeds, rows.Err()
 }
 
+// RemoveFeed deletes the feed with the given ID. Due to the ON DELETE CASCADE
+// constraint on the entries table, all entries belonging to this feed are also
+// deleted. No error is returned if the ID does not exist.
 func (s *SQLiteStore) RemoveFeed(ctx context.Context, id int64) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM feeds WHERE id = ?`, id)
 	if err != nil {
@@ -98,6 +133,9 @@ func (s *SQLiteStore) RemoveFeed(ctx context.Context, id int64) error {
 	return nil
 }
 
+// UpdateFeedFetchedAt sets the feed's fetched_at column to the current UTC
+// time. This is called after a successful fetch cycle to record when the feed
+// was last refreshed.
 func (s *SQLiteStore) UpdateFeedFetchedAt(ctx context.Context, id int64) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.ExecContext(ctx,
@@ -109,6 +147,13 @@ func (s *SQLiteStore) UpdateFeedFetchedAt(ctx context.Context, id int64) error {
 	return nil
 }
 
+// AddEntries inserts multiple entries in a single transaction. Entries whose
+// (feed_id, guid) pair already exists in the database are silently skipped
+// thanks to INSERT OR IGNORE and the UNIQUE constraint.
+//
+// Returns the number of rows actually inserted (i.e. excluding duplicates).
+// If the input slice is empty or nil, it returns (0, nil) immediately without
+// opening a transaction.
 func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (int, error) {
 	if len(entries) == 0 {
 		return 0, nil
@@ -149,6 +194,14 @@ func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (in
 	return inserted, nil
 }
 
+// ListEntries queries entries matching the given filter criteria.
+//
+// The filter supports:
+//   - FeedID: when non-nil, restricts results to the specified feed.
+//   - Limit: caps the number of rows returned (0 = unlimited).
+//   - Offset: skips the first N rows for pagination.
+//
+// Results are always ordered by fetched_at DESC (newest first).
 func (s *SQLiteStore) ListEntries(ctx context.Context, filter core.EntryFilter) ([]*core.Entry, error) {
 	query := `SELECT id, feed_id, guid, title, link, summary, published_at, fetched_at FROM entries`
 	var args []any
@@ -187,10 +240,15 @@ func (s *SQLiteStore) ListEntries(ctx context.Context, filter core.EntryFilter) 
 	return entries, rows.Err()
 }
 
+// scanner is a minimal interface satisfied by both *sql.Row and *sql.Rows,
+// allowing scanFeed and scanEntry to work with either single-row or multi-row
+// query results.
 type scanner interface {
 	Scan(dest ...any) error
 }
 
+// scanFeed reads a single feed row from the scanner and converts the stored
+// ISO 8601 timestamp strings back into Go time.Time values.
 func scanFeed(s scanner) (*core.Feed, error) {
 	var f core.Feed
 	var addedAt string
@@ -217,6 +275,9 @@ func scanFeed(s scanner) (*core.Feed, error) {
 	return &f, nil
 }
 
+// scanEntry reads a single entry row from the scanner and converts the stored
+// ISO 8601 timestamp strings back into Go time.Time values. The published_at
+// column is nullable and maps to a *time.Time.
 func scanEntry(s scanner) (*core.Entry, error) {
 	var e core.Entry
 	var publishedAt *string

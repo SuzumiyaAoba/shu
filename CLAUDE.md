@@ -1,43 +1,41 @@
-# shu
+# CLAUDE.md
 
-Go 製 RSS Aggregator CLI。RSS フィードを収集し SQLite に保存する。
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 開発環境
+## Build & Development
 
-```bash
-nix develop  # Nix devshell に入る
-```
-
-## ビルド・実行
+This project uses Nix for reproducible development environments.
 
 ```bash
-go build -o shu .
-./shu --help
+nix develop                       # Enter dev shell (Go, gopls, golangci-lint, sqlite)
+go build -o shu .                 # Build binary
+go test ./...                     # Run all tests
+go test ./store/ -v               # Run tests for a specific package
+go test ./core/ -run TestFetchAll # Run a single test
+golangci-lint run                 # Lint
 ```
 
-## テスト
+Makefile shortcuts: `make build`, `make test`, `make lint`, `make clean`
 
-```bash
-go test ./...
-```
+## Architecture
 
-## Lint
+Three-layer architecture with dependency injection, designed so `core/` can run outside the CLI (e.g., AWS Lambda):
 
-```bash
-golangci-lint run
-```
+- **`cmd/`** — CLI layer (Cobra). Composition root that wires `core.Service` with `store.SQLiteStore`. Global flags (`--db`, `--log-level`) and DB/Service initialization happen in `PersistentPreRunE` of `cmd/root.go`.
+- **`core/`** — Business logic. Defines its own `Store` interface (`core/core.go`) and depends only on that interface, never on SQLite or CLI. `Service` struct holds the store, logger, and HTTP client.
+- **`store/`** — SQLite storage. Implements `core.Store`. Schema migrations are embedded via `go:embed` and auto-applied on `NewSQLiteStore()`. Deduplication uses `INSERT OR IGNORE` with a `UNIQUE(feed_id, guid)` constraint.
 
-## 技術スタック
+Key constraint: `core/` must never import `cmd/` or `store/`. `store/` imports `core/` only for model types.
 
-- Go 1.22+
-- SQLite ドライバ: `modernc.org/sqlite` (Pure Go, CGo 不要)
-- CLI: `github.com/spf13/cobra`
-- RSS パース: `github.com/mmcdole/gofeed`
-- ログ: `log/slog` (stdlib)
+## Testing Patterns
 
-## アーキテクチャ
+- All tests use in-memory SQLite (`:memory:`) — no test fixtures or external databases.
+- Core tests use `httptest.NewServer` with mock RSS XML to avoid network calls.
+- Test helpers: `newTestService()` in `core/feed_test.go`, `newTestStore()` in `store/sqlite_test.go`.
 
-- `core/` - ビジネスロジック。CLI やインフラに依存しないこと
-- `store/` - ストレージ層。`Store` インターフェースを通じてのみ `core` から利用
-- `cmd/` - CLI 層 (Cobra)。`core` と `store` を結合するコンポジションルート
-- テストでは `:memory:` SQLite DB を使用
+## Key Dependencies
+
+- `modernc.org/sqlite` — Pure Go SQLite driver (no CGo, simplifies cross-compilation)
+- `github.com/mmcdole/gofeed` — RSS/Atom/JSON Feed parser
+- `github.com/spf13/cobra` — CLI framework
+- `log/slog` — Structured logging (stdlib)

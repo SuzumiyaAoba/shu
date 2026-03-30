@@ -6,8 +6,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// fetchFeedID holds the optional --feed-id flag value. When greater than zero,
+// only the specified feed is fetched instead of all feeds.
 var fetchFeedID int64
 
+// fetchCmd implements "shu fetch".
+//
+// By default it fetches all registered feeds, downloads their latest items,
+// and stores any new entries. When --feed-id is provided, only that single
+// feed is fetched.
+//
+// This is a one-shot operation: it runs once and exits. For periodic fetching,
+// use "shu run" instead.
 var fetchCmd = &cobra.Command{
 	Use:   "fetch",
 	Short: "Fetch all feeds (or a specific feed)",

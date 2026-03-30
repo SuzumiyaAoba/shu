@@ -7,6 +7,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// removeCmd implements "shu remove <id>".
+//
+// It deletes the feed with the given numeric ID and all of its associated
+// entries (via cascade delete in the database). The ID can be found using
+// "shu list".
 var removeCmd = &cobra.Command{
 	Use:   "remove <id>",
 	Short: "Remove a feed and its entries",

@@ -8,8 +8,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// listJSON controls whether the output is formatted as JSON instead of a
+// human-readable table.
 var listJSON bool
 
+// listCmd implements "shu list".
+//
+// It displays all registered feeds in a tabular format showing ID, title, URL,
+// and the last-fetched timestamp. When --json is passed, it outputs the full
+// feed data as a pretty-printed JSON array.
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all feeds",

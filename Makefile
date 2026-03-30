@@ -1,13 +1,15 @@
+NIX_RUN = nix develop --command
+
 .PHONY: build test lint clean
 
 build:
-	go build -o shu .
+	$(NIX_RUN) go build -o shu .
 
 test:
-	go test ./...
+	$(NIX_RUN) go test ./...
 
 lint:
-	golangci-lint run
+	$(NIX_RUN) golangci-lint run
 
 clean:
 	rm -f shu

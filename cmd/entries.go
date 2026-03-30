@@ -10,11 +10,27 @@ import (
 )
 
 var (
+	// entriesFeedID filters entries to a specific feed when greater than zero.
 	entriesFeedID int64
-	entriesLimit  int
-	entriesJSON   bool
+	// entriesLimit caps the number of entries displayed. Defaults to 20.
+	entriesLimit int
+	// entriesJSON controls whether output is formatted as JSON instead of a
+	// human-readable table.
+	entriesJSON bool
 )
 
+// entriesCmd implements "shu entries".
+//
+// It displays stored feed entries in reverse chronological order (newest
+// first). The output can be filtered by feed ID and limited to a maximum
+// number of rows. When --json is passed, entries are output as a
+// pretty-printed JSON array.
+//
+// Examples:
+//
+//	shu entries                     # Show the 20 most recent entries
+//	shu entries --feed-id 3         # Show entries from feed #3 only
+//	shu entries --limit 50 --json   # Show 50 entries as JSON
 var entriesCmd = &cobra.Command{
 	Use:   "entries",
 	Short: "List stored entries",
