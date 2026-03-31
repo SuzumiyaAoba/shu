@@ -23,9 +23,13 @@ func TestAddFeed(t *testing.T) {
 	ctx := context.Background()
 
 	feed := &core.Feed{
-		URL:     "https://example.com/feed.xml",
-		Title:   "Example Feed",
-		SiteURL: "https://example.com",
+		URL:         "https://example.com/feed.xml",
+		Title:       "Example Feed",
+		SiteURL:     "https://example.com",
+		Description: "A test feed",
+		Language:    "en",
+		ImageURL:    "https://example.com/logo.png",
+		FeedType:    "rss",
 	}
 
 	err := s.AddFeed(ctx, feed)
@@ -62,9 +66,13 @@ func TestGetFeed(t *testing.T) {
 	ctx := context.Background()
 
 	feed := &core.Feed{
-		URL:     "https://example.com/feed.xml",
-		Title:   "Example Feed",
-		SiteURL: "https://example.com",
+		URL:         "https://example.com/feed.xml",
+		Title:       "Example Feed",
+		SiteURL:     "https://example.com",
+		Description: "A test feed",
+		Language:    "en",
+		ImageURL:    "https://example.com/logo.png",
+		FeedType:    "rss",
 	}
 	_ = s.AddFeed(ctx, feed)
 
@@ -77,6 +85,18 @@ func TestGetFeed(t *testing.T) {
 	}
 	if got.Title != feed.Title {
 		t.Errorf("Title = %q, want %q", got.Title, feed.Title)
+	}
+	if got.Description != "A test feed" {
+		t.Errorf("Description = %q, want %q", got.Description, "A test feed")
+	}
+	if got.Language != "en" {
+		t.Errorf("Language = %q, want %q", got.Language, "en")
+	}
+	if got.ImageURL != "https://example.com/logo.png" {
+		t.Errorf("ImageURL = %q, want %q", got.ImageURL, "https://example.com/logo.png")
+	}
+	if got.FeedType != "rss" {
+		t.Errorf("FeedType = %q, want %q", got.FeedType, "rss")
 	}
 }
 
@@ -132,7 +152,7 @@ func TestRemoveFeedCascadesEntries(t *testing.T) {
 	_ = s.AddFeed(ctx, feed)
 
 	entries := []*core.Entry{
-		{FeedID: feed.ID, GUID: "1", Title: "Entry 1"},
+		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: "[]", Enclosures: "[]"},
 	}
 	_, _ = s.AddEntries(ctx, entries)
 
@@ -175,8 +195,8 @@ func TestAddEntries(t *testing.T) {
 
 	now := time.Now()
 	entries := []*core.Entry{
-		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1", Link: "https://example.com/1", PublishedAt: &now},
-		{FeedID: feed.ID, GUID: "guid-2", Title: "Entry 2", Link: "https://example.com/2"},
+		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1", Link: "https://example.com/1", PublishedAt: &now, Categories: "[]", Enclosures: "[]"},
+		{FeedID: feed.ID, GUID: "guid-2", Title: "Entry 2", Link: "https://example.com/2", Categories: "[]", Enclosures: "[]"},
 	}
 
 	inserted, err := s.AddEntries(ctx, entries)
@@ -188,6 +208,71 @@ func TestAddEntries(t *testing.T) {
 	}
 }
 
+func TestAddEntriesExpandedFields(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	_ = s.AddFeed(ctx, feed)
+
+	now := time.Now()
+	updated := now.Add(time.Hour)
+	entries := []*core.Entry{
+		{
+			FeedID:     feed.ID,
+			GUID:       "guid-full",
+			Title:      "Full Entry",
+			Link:       "https://example.com/full",
+			Summary:    "Short summary",
+			Content:    "<p>Full HTML content</p>",
+			Author:     "John Doe",
+			ImageURL:   "https://example.com/image.jpg",
+			Categories: `["go","rss","tech"]`,
+			PublishedAt: &now,
+			UpdatedAt:  &updated,
+			Enclosures: `[{"url":"https://example.com/ep1.mp3","length":"12345","type":"audio/mpeg"}]`,
+		},
+	}
+
+	inserted, err := s.AddEntries(ctx, entries)
+	if err != nil {
+		t.Fatalf("AddEntries failed: %v", err)
+	}
+	if inserted != 1 {
+		t.Errorf("inserted = %d, want 1", inserted)
+	}
+
+	// Verify round-trip via ListEntries.
+	feedID := feed.ID
+	result, err := s.ListEntries(ctx, core.EntryFilter{FeedID: &feedID, Limit: 10})
+	if err != nil {
+		t.Fatalf("ListEntries failed: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d entries, want 1", len(result))
+	}
+
+	e := result[0]
+	if e.Content != "<p>Full HTML content</p>" {
+		t.Errorf("Content = %q, want %q", e.Content, "<p>Full HTML content</p>")
+	}
+	if e.Author != "John Doe" {
+		t.Errorf("Author = %q, want %q", e.Author, "John Doe")
+	}
+	if e.ImageURL != "https://example.com/image.jpg" {
+		t.Errorf("ImageURL = %q, want %q", e.ImageURL, "https://example.com/image.jpg")
+	}
+	if e.Categories != `["go","rss","tech"]` {
+		t.Errorf("Categories = %q, want %q", e.Categories, `["go","rss","tech"]`)
+	}
+	if e.UpdatedAt == nil {
+		t.Error("expected UpdatedAt to be set")
+	}
+	if e.Enclosures != `[{"url":"https://example.com/ep1.mp3","length":"12345","type":"audio/mpeg"}]` {
+		t.Errorf("Enclosures = %q, want JSON with podcast enclosure", e.Enclosures)
+	}
+}
+
 func TestAddEntriesDeduplication(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -196,14 +281,14 @@ func TestAddEntriesDeduplication(t *testing.T) {
 	_ = s.AddFeed(ctx, feed)
 
 	entries := []*core.Entry{
-		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1"},
+		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1", Categories: "[]", Enclosures: "[]"},
 	}
 	_, _ = s.AddEntries(ctx, entries)
 
 	// Same GUID should be skipped
 	dupes := []*core.Entry{
-		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1 Updated"},
-		{FeedID: feed.ID, GUID: "guid-2", Title: "Entry 2"},
+		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1 Updated", Categories: "[]", Enclosures: "[]"},
+		{FeedID: feed.ID, GUID: "guid-2", Title: "Entry 2", Categories: "[]", Enclosures: "[]"},
 	}
 	inserted, err := s.AddEntries(ctx, dupes)
 	if err != nil {
@@ -235,9 +320,9 @@ func TestListEntries(t *testing.T) {
 	_ = s.AddFeed(ctx, feed)
 
 	entries := []*core.Entry{
-		{FeedID: feed.ID, GUID: "1", Title: "Entry 1"},
-		{FeedID: feed.ID, GUID: "2", Title: "Entry 2"},
-		{FeedID: feed.ID, GUID: "3", Title: "Entry 3"},
+		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: "[]", Enclosures: "[]"},
+		{FeedID: feed.ID, GUID: "2", Title: "Entry 2", Categories: "[]", Enclosures: "[]"},
+		{FeedID: feed.ID, GUID: "3", Title: "Entry 3", Categories: "[]", Enclosures: "[]"},
 	}
 	_, _ = s.AddEntries(ctx, entries)
 
@@ -260,9 +345,9 @@ func TestListEntriesFilterByFeed(t *testing.T) {
 	_ = s.AddFeed(ctx, feed2)
 
 	_, _ = s.AddEntries(ctx, []*core.Entry{
-		{FeedID: feed1.ID, GUID: "a1", Title: "A1"},
-		{FeedID: feed1.ID, GUID: "a2", Title: "A2"},
-		{FeedID: feed2.ID, GUID: "b1", Title: "B1"},
+		{FeedID: feed1.ID, GUID: "a1", Title: "A1", Categories: "[]", Enclosures: "[]"},
+		{FeedID: feed1.ID, GUID: "a2", Title: "A2", Categories: "[]", Enclosures: "[]"},
+		{FeedID: feed2.ID, GUID: "b1", Title: "B1", Categories: "[]", Enclosures: "[]"},
 	})
 
 	feedID := feed1.ID

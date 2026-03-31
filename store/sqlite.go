@@ -3,20 +3,28 @@ package store
 import (
 	"context"
 	"database/sql"
-	_ "embed"
+	"embed"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/SuzumiyaAoba/shu/core"
 	_ "modernc.org/sqlite" // Register the pure-Go SQLite driver.
 )
 
-// initSQL contains the DDL statements for creating the feeds and entries tables.
-// It is embedded at compile time from the migrations directory so that the
-// binary is fully self-contained and no external migration files are needed.
+// migrationsFS embeds all SQL migration files from the migrations directory.
+// Files are named with a numeric prefix (e.g. 001_, 002_) and executed in
+// lexicographic order. Each migration runs at most once, tracked by the
+// schema_migrations table.
 //
-//go:embed migrations/001_init.sql
-var initSQL string
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
+
+// feedColumns is the SELECT column list shared by GetFeed and ListFeeds.
+const feedColumns = `id, url, title, site_url, added_at, fetched_at, description, language, image_url, feed_type`
+
+// entryColumns is the SELECT column list shared by ListEntries.
+const entryColumns = `id, feed_id, guid, title, link, summary, published_at, fetched_at, content, author, image_url, categories, updated_at, enclosures`
 
 // SQLiteStore implements [Store] using a SQLite database via the pure-Go
 // modernc.org/sqlite driver (no CGo required).
@@ -38,7 +46,7 @@ type SQLiteStore struct {
 //  1. Open the database connection.
 //  2. Enable WAL journal mode for improved concurrent read performance.
 //  3. Enable foreign key constraint enforcement (SQLite disables it by default).
-//  4. Execute the embedded schema migration SQL.
+//  4. Run all pending schema migrations tracked by the schema_migrations table.
 //
 // If any step fails, the database is closed and an error is returned.
 func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
@@ -56,12 +64,53 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 
-	if _, err := db.Exec(initSQL); err != nil {
+	s := &SQLiteStore{db: db}
+	if err := s.runMigrations(); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("run migrations: %w", err)
+		return nil, err
 	}
 
-	return &SQLiteStore{db: db}, nil
+	return s, nil
+}
+
+// runMigrations applies all embedded SQL migration files that have not yet been
+// executed. It uses a schema_migrations table to track which files have already
+// been applied, ensuring each migration runs exactly once and enabling safe
+// ALTER TABLE statements that would fail if re-executed.
+func (s *SQLiteStore) runMigrations() error {
+	if _, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (filename TEXT PRIMARY KEY)`); err != nil {
+		return fmt.Errorf("create schema_migrations table: %w", err)
+	}
+
+	entries, err := migrationsFS.ReadDir("migrations")
+	if err != nil {
+		return fmt.Errorf("read migrations dir: %w", err)
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+
+	for _, entry := range entries {
+		name := entry.Name()
+
+		var count int
+		if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE filename = ?`, name).Scan(&count); err != nil {
+			return fmt.Errorf("check migration %s: %w", name, err)
+		}
+		if count > 0 {
+			continue
+		}
+
+		data, err := migrationsFS.ReadFile("migrations/" + name)
+		if err != nil {
+			return fmt.Errorf("read migration %s: %w", name, err)
+		}
+		if _, err := s.db.Exec(string(data)); err != nil {
+			return fmt.Errorf("run migration %s: %w", name, err)
+		}
+		if _, err := s.db.Exec(`INSERT INTO schema_migrations (filename) VALUES (?)`, name); err != nil {
+			return fmt.Errorf("record migration %s: %w", name, err)
+		}
+	}
+	return nil
 }
 
 // Close closes the underlying database connection pool.
@@ -76,8 +125,9 @@ func (s *SQLiteStore) Close() error {
 func (s *SQLiteStore) AddFeed(ctx context.Context, feed *core.Feed) error {
 	now := time.Now().UTC()
 	result, err := s.db.ExecContext(ctx,
-		`INSERT INTO feeds (url, title, site_url, added_at) VALUES (?, ?, ?, ?)`,
+		`INSERT INTO feeds (url, title, site_url, added_at, description, language, image_url, feed_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		feed.URL, feed.Title, feed.SiteURL, now.Format(time.RFC3339),
+		feed.Description, feed.Language, feed.ImageURL, feed.FeedType,
 	)
 	if err != nil {
 		return fmt.Errorf("insert feed: %w", err)
@@ -95,7 +145,7 @@ func (s *SQLiteStore) AddFeed(ctx context.Context, feed *core.Feed) error {
 // Returns a "scan feed" error wrapping sql.ErrNoRows if the ID does not exist.
 func (s *SQLiteStore) GetFeed(ctx context.Context, id int64) (*core.Feed, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, url, title, site_url, added_at, fetched_at FROM feeds WHERE id = ?`, id,
+		`SELECT `+feedColumns+` FROM feeds WHERE id = ?`, id,
 	)
 	return scanFeed(row)
 }
@@ -104,7 +154,7 @@ func (s *SQLiteStore) GetFeed(ctx context.Context, id int64) (*core.Feed, error)
 // Returns an empty (non-nil) slice if no feeds are registered.
 func (s *SQLiteStore) ListFeeds(ctx context.Context) ([]*core.Feed, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, url, title, site_url, added_at, fetched_at FROM feeds ORDER BY id`,
+		`SELECT `+feedColumns+` FROM feeds ORDER BY id`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query feeds: %w", err)
@@ -166,7 +216,7 @@ func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (in
 	defer tx.Rollback()
 
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT OR IGNORE INTO entries (feed_id, guid, title, link, summary, published_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT OR IGNORE INTO entries (feed_id, guid, title, link, summary, published_at, content, author, image_url, categories, updated_at, enclosures) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("prepare statement: %w", err)
@@ -180,7 +230,15 @@ func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (in
 			s := e.PublishedAt.UTC().Format(time.RFC3339)
 			pubAt = &s
 		}
-		result, err := stmt.ExecContext(ctx, e.FeedID, e.GUID, e.Title, e.Link, e.Summary, pubAt)
+		var updAt *string
+		if e.UpdatedAt != nil {
+			s := e.UpdatedAt.UTC().Format(time.RFC3339)
+			updAt = &s
+		}
+		result, err := stmt.ExecContext(ctx,
+			e.FeedID, e.GUID, e.Title, e.Link, e.Summary, pubAt,
+			e.Content, e.Author, e.ImageURL, e.Categories, updAt, e.Enclosures,
+		)
 		if err != nil {
 			return 0, fmt.Errorf("insert entry: %w", err)
 		}
@@ -203,7 +261,7 @@ func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (in
 //
 // Results are always ordered by fetched_at DESC (newest first).
 func (s *SQLiteStore) ListEntries(ctx context.Context, filter core.EntryFilter) ([]*core.Entry, error) {
-	query := `SELECT id, feed_id, guid, title, link, summary, published_at, fetched_at FROM entries`
+	query := `SELECT ` + entryColumns + ` FROM entries`
 	var args []any
 
 	if filter.FeedID != nil {
@@ -254,7 +312,10 @@ func scanFeed(s scanner) (*core.Feed, error) {
 	var addedAt string
 	var fetchedAt *string
 
-	if err := s.Scan(&f.ID, &f.URL, &f.Title, &f.SiteURL, &addedAt, &fetchedAt); err != nil {
+	if err := s.Scan(
+		&f.ID, &f.URL, &f.Title, &f.SiteURL, &addedAt, &fetchedAt,
+		&f.Description, &f.Language, &f.ImageURL, &f.FeedType,
+	); err != nil {
 		return nil, fmt.Errorf("scan feed: %w", err)
 	}
 
@@ -277,13 +338,18 @@ func scanFeed(s scanner) (*core.Feed, error) {
 
 // scanEntry reads a single entry row from the scanner and converts the stored
 // ISO 8601 timestamp strings back into Go time.Time values. The published_at
-// column is nullable and maps to a *time.Time.
+// and updated_at columns are nullable and map to *time.Time.
 func scanEntry(s scanner) (*core.Entry, error) {
 	var e core.Entry
 	var publishedAt *string
 	var fetchedAt string
+	var updatedAt *string
 
-	if err := s.Scan(&e.ID, &e.FeedID, &e.GUID, &e.Title, &e.Link, &e.Summary, &publishedAt, &fetchedAt); err != nil {
+	if err := s.Scan(
+		&e.ID, &e.FeedID, &e.GUID, &e.Title, &e.Link, &e.Summary,
+		&publishedAt, &fetchedAt,
+		&e.Content, &e.Author, &e.ImageURL, &e.Categories, &updatedAt, &e.Enclosures,
+	); err != nil {
 		return nil, fmt.Errorf("scan entry: %w", err)
 	}
 
@@ -299,6 +365,14 @@ func scanEntry(s scanner) (*core.Entry, error) {
 			return nil, fmt.Errorf("parse published_at: %w", err)
 		}
 		e.PublishedAt = &t
+	}
+
+	if updatedAt != nil {
+		t, err := time.Parse(time.RFC3339, *updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("parse updated_at: %w", err)
+		}
+		e.UpdatedAt = &t
 	}
 
 	return &e, nil

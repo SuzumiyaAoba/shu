@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/mmcdole/gofeed"
@@ -48,16 +49,61 @@ func (s *Service) FetchFeed(ctx context.Context, feedID int64) ([]*Entry, error)
 		}
 
 		e := &Entry{
-			FeedID:  feedID,
-			GUID:    guid,
-			Title:   item.Title,
-			Link:    item.Link,
-			Summary: item.Description,
+			FeedID:     feedID,
+			GUID:       guid,
+			Title:      item.Title,
+			Link:       item.Link,
+			Summary:    item.Description,
+			Content:    item.Content,
+			Categories: "[]",
+			Enclosures: "[]",
 		}
+
+		// Published date.
 		if item.PublishedParsed != nil {
 			t := item.PublishedParsed.UTC()
 			e.PublishedAt = &t
 		}
+
+		// Updated date.
+		if item.UpdatedParsed != nil {
+			t := item.UpdatedParsed.UTC()
+			e.UpdatedAt = &t
+		}
+
+		// Author: flatten from Authors array, fall back to deprecated Author.
+		if len(item.Authors) > 0 && item.Authors[0] != nil {
+			e.Author = item.Authors[0].Name
+		} else if item.Author != nil {
+			e.Author = item.Author.Name
+		}
+
+		// Image URL.
+		if item.Image != nil {
+			e.ImageURL = item.Image.URL
+		}
+
+		// Categories as JSON array.
+		if len(item.Categories) > 0 {
+			b, _ := json.Marshal(item.Categories)
+			e.Categories = string(b)
+		}
+
+		// Enclosures as JSON array of {url, length, type}.
+		if len(item.Enclosures) > 0 {
+			type enclosure struct {
+				URL    string `json:"url"`
+				Length string `json:"length"`
+				Type   string `json:"type"`
+			}
+			encs := make([]enclosure, len(item.Enclosures))
+			for i, v := range item.Enclosures {
+				encs[i] = enclosure{URL: v.URL, Length: v.Length, Type: v.Type}
+			}
+			b, _ := json.Marshal(encs)
+			e.Enclosures = string(b)
+		}
+
 		entries = append(entries, e)
 	}
 

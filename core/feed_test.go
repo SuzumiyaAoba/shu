@@ -33,15 +33,26 @@ func newTestService(t *testing.T, handler http.Handler) *core.Service {
 }
 
 const testRSSFeed = `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0">
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
   <channel>
     <title>Test Blog</title>
     <link>https://example.com</link>
+    <description>A blog about testing</description>
+    <language>en</language>
+    <image>
+      <url>https://example.com/logo.png</url>
+      <title>Test Blog</title>
+    </image>
     <item>
       <title>Post 1</title>
       <link>https://example.com/post-1</link>
       <guid>post-1</guid>
       <description>First post</description>
+      <content:encoded><![CDATA[<p>Full content of post 1</p>]]></content:encoded>
+      <author>alice@example.com (Alice)</author>
+      <category>Go</category>
+      <category>Testing</category>
+      <enclosure url="https://example.com/ep1.mp3" length="12345" type="audio/mpeg"/>
     </item>
     <item>
       <title>Post 2</title>
@@ -105,6 +116,18 @@ func TestAddFeed(t *testing.T) {
 	}
 	if feed.SiteURL != "https://example.com" {
 		t.Errorf("SiteURL = %q, want %q", feed.SiteURL, "https://example.com")
+	}
+	if feed.Description != "A blog about testing" {
+		t.Errorf("Description = %q, want %q", feed.Description, "A blog about testing")
+	}
+	if feed.Language != "en" {
+		t.Errorf("Language = %q, want %q", feed.Language, "en")
+	}
+	if feed.ImageURL != "https://example.com/logo.png" {
+		t.Errorf("ImageURL = %q, want %q", feed.ImageURL, "https://example.com/logo.png")
+	}
+	if feed.FeedType != "rss" {
+		t.Errorf("FeedType = %q, want %q", feed.FeedType, "rss")
 	}
 }
 

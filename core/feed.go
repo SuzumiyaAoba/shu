@@ -38,10 +38,19 @@ func (s *Service) AddFeed(ctx context.Context, url string, titleOverride string)
 		siteURL = parsed.Link
 	}
 
+	imageURL := ""
+	if parsed.Image != nil {
+		imageURL = parsed.Image.URL
+	}
+
 	feed := &Feed{
-		URL:     url,
-		Title:   title,
-		SiteURL: siteURL,
+		URL:         url,
+		Title:       title,
+		SiteURL:     siteURL,
+		Description: parsed.Description,
+		Language:    parsed.Language,
+		ImageURL:    imageURL,
+		FeedType:    parsed.FeedType,
 	}
 
 	if err := s.store.AddFeed(ctx, feed); err != nil {

@@ -23,6 +23,18 @@ type Feed struct {
 	// FetchedAt records the last time the feed was successfully fetched.
 	// It is nil if the feed has never been fetched after registration.
 	FetchedAt *time.Time
+	// Description is the feed's tagline or description text, extracted from
+	// the <description> (RSS) or <subtitle> (Atom) element.
+	Description string
+	// Language is the feed's declared language code (e.g. "en", "ja"),
+	// extracted from the <language> element.
+	Language string
+	// ImageURL is the URL of the feed's logo or icon image, extracted from
+	// the <image><url> element.
+	ImageURL string
+	// FeedType indicates the detected feed format as reported by gofeed:
+	// "rss", "atom", or "json".
+	FeedType string
 }
 
 // Entry represents a single article or item from an RSS/Atom feed.
@@ -50,6 +62,25 @@ type Entry struct {
 	PublishedAt *time.Time
 	// FetchedAt records when this entry was first stored in the database.
 	FetchedAt time.Time
+	// Content is the full HTML content of the entry, from <content:encoded>
+	// (RSS) or <content> (Atom). It may be empty if the feed only provides
+	// a summary.
+	Content string
+	// Author is the entry author's display name, taken from the first element
+	// of the source feed's authors list. Empty if no author is specified.
+	Author string
+	// ImageURL is the URL of the entry's featured image or thumbnail.
+	ImageURL string
+	// Categories is a JSON-encoded array of tag/category strings
+	// (e.g. `["go","rss"]`). Defaults to "[]" when no categories are present.
+	Categories string
+	// UpdatedAt is when the entry was last modified by the source feed.
+	// It is nil if the source does not provide an update timestamp.
+	UpdatedAt *time.Time
+	// Enclosures is a JSON-encoded array of media attachment objects.
+	// Each element has the shape {"url":"...","length":"...","type":"..."}.
+	// Defaults to "[]" when no enclosures are present.
+	Enclosures string
 }
 
 // EntryFilter specifies criteria for querying stored entries.
