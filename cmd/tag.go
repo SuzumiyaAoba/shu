@@ -41,6 +41,8 @@ var untagCmd = &cobra.Command{
 	},
 }
 
+var tagsJSON bool
+
 var tagsCmd = &cobra.Command{
 	Use:   "tags [feed-id]",
 	Short: "List tags (all or for a specific feed)",
@@ -57,6 +59,9 @@ var tagsCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+			if tagsJSON {
+				return writeJSON(cmd.OutOrStdout(), tags)
+			}
 			for _, t := range tags {
 				fmt.Fprintln(cmd.OutOrStdout(), t.Name)
 			}
@@ -66,6 +71,10 @@ var tagsCmd = &cobra.Command{
 		tags, err := svc.ListAllTags(ctx)
 		if err != nil {
 			return err
+		}
+
+		if tagsJSON {
+			return writeJSON(cmd.OutOrStdout(), tags)
 		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
@@ -78,6 +87,7 @@ var tagsCmd = &cobra.Command{
 }
 
 func init() {
+	tagsCmd.Flags().BoolVar(&tagsJSON, "json", false, "output as JSON")
 	rootCmd.AddCommand(tagCmd)
 	rootCmd.AddCommand(untagCmd)
 	rootCmd.AddCommand(tagsCmd)

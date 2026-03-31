@@ -6,6 +6,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var discoverJSON bool
+
 var discoverCmd = &cobra.Command{
 	Use:   "discover <url>",
 	Short: "Discover feed URLs from a web page",
@@ -15,6 +17,11 @@ var discoverCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
+		if discoverJSON {
+			return writeJSON(cmd.OutOrStdout(), feeds)
+		}
+
 		if len(feeds) == 0 {
 			fmt.Fprintln(cmd.OutOrStdout(), "No feeds found.")
 			return nil
@@ -27,5 +34,6 @@ var discoverCmd = &cobra.Command{
 }
 
 func init() {
+	discoverCmd.Flags().BoolVar(&discoverJSON, "json", false, "output as JSON")
 	rootCmd.AddCommand(discoverCmd)
 }

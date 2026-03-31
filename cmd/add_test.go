@@ -40,3 +40,15 @@ func TestAddCmdMissingArg(t *testing.T) {
 		t.Error("expected error for missing URL argument")
 	}
 }
+
+func TestAddCmdJSON(t *testing.T) {
+	tsURL := setupTest(t)
+
+	out, err := executeCommand("add", tsURL+"/feed.xml", "--json")
+	if err != nil {
+		t.Fatalf("add --json failed: %v", err)
+	}
+	if !strings.Contains(out, `"Title"`) || !strings.Contains(out, "Test Blog") {
+		t.Errorf("expected JSON output with feed data: %s", out)
+	}
+}

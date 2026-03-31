@@ -6,9 +6,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// addTitle holds the optional --title flag value. When non-empty, it overrides
-// the title extracted from the feed document.
-var addTitle string
+var (
+	// addTitle holds the optional --title flag value. When non-empty, it overrides
+	// the title extracted from the feed document.
+	addTitle string
+	// addJSON controls whether the output is formatted as JSON.
+	addJSON bool
+)
 
 // addCmd implements "shu add <url>".
 //
@@ -29,6 +33,9 @@ var addCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if addJSON {
+			return writeJSON(cmd.OutOrStdout(), feed)
+		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Added feed #%d: %s (%s)\n", feed.ID, feed.Title, feed.URL)
 		return nil
 	},
@@ -36,5 +43,6 @@ var addCmd = &cobra.Command{
 
 func init() {
 	addCmd.Flags().StringVar(&addTitle, "title", "", "override feed title")
+	addCmd.Flags().BoolVar(&addJSON, "json", false, "output as JSON")
 	rootCmd.AddCommand(addCmd)
 }

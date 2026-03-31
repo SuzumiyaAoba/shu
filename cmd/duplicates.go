@@ -7,6 +7,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var duplicatesJSON bool
+
 var duplicatesCmd = &cobra.Command{
 	Use:   "duplicates <entry-id>",
 	Short: "Find entries from other feeds with the same link",
@@ -20,6 +22,10 @@ var duplicatesCmd = &cobra.Command{
 		dupes, err := svc.FindDuplicateEntries(cmd.Context(), id)
 		if err != nil {
 			return err
+		}
+
+		if duplicatesJSON {
+			return writeJSON(cmd.OutOrStdout(), dupes)
 		}
 
 		if len(dupes) == 0 {
@@ -37,5 +43,6 @@ var duplicatesCmd = &cobra.Command{
 }
 
 func init() {
+	duplicatesCmd.Flags().BoolVar(&duplicatesJSON, "json", false, "output as JSON")
 	rootCmd.AddCommand(duplicatesCmd)
 }

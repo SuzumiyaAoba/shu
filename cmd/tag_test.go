@@ -46,3 +46,18 @@ func TestTagUntagCmd(t *testing.T) {
 		t.Errorf("unexpected output: %s", out)
 	}
 }
+
+func TestTagsCmdJSON(t *testing.T) {
+	tsURL := setupTest(t)
+
+	_, _ = executeCommand("add", tsURL+"/feed.xml")
+	_, _ = executeCommand("tag", "1", "tech")
+
+	out, err := executeCommand("tags", "--json")
+	if err != nil {
+		t.Fatalf("tags --json failed: %v", err)
+	}
+	if !strings.Contains(out, `"Name"`) || !strings.Contains(out, "tech") {
+		t.Errorf("expected JSON output with tag data: %s", out)
+	}
+}

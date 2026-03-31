@@ -6,9 +6,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// fetchFeedID holds the optional --feed-id flag value. When greater than zero,
-// only the specified feed is fetched instead of all feeds.
-var fetchFeedID int64
+var (
+	// fetchFeedID holds the optional --feed-id flag value. When greater than zero,
+	// only the specified feed is fetched instead of all feeds.
+	fetchFeedID int64
+	// fetchJSON controls whether the output is formatted as JSON.
+	fetchJSON bool
+)
 
 // fetchCmd implements "shu fetch".
 //
@@ -29,6 +33,9 @@ var fetchCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+			if fetchJSON {
+				return writeJSON(cmd.OutOrStdout(), entries)
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries from feed #%d\n", len(entries), fetchFeedID)
 			return nil
 		}
@@ -37,6 +44,9 @@ var fetchCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if fetchJSON {
+			return writeJSON(cmd.OutOrStdout(), map[string]int{"count": count})
+		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count)
 		return nil
 	},
@@ -44,5 +54,6 @@ var fetchCmd = &cobra.Command{
 
 func init() {
 	fetchCmd.Flags().Int64Var(&fetchFeedID, "feed-id", 0, "fetch a specific feed by ID")
+	fetchCmd.Flags().BoolVar(&fetchJSON, "json", false, "output as JSON")
 	rootCmd.AddCommand(fetchCmd)
 }

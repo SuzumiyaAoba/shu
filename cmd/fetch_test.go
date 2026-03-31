@@ -44,3 +44,30 @@ func TestFetchCmdNoFeeds(t *testing.T) {
 		t.Errorf("expected 0 entries for empty feed list: %s", out)
 	}
 }
+
+func TestFetchCmdJSON(t *testing.T) {
+	setupTest(t)
+
+	out, err := executeCommand("fetch", "--json")
+	if err != nil {
+		t.Fatalf("fetch --json failed: %v", err)
+	}
+	if !strings.Contains(out, `"count"`) {
+		t.Errorf("expected JSON output with count: %s", out)
+	}
+}
+
+func TestFetchCmdByFeedIDJSON(t *testing.T) {
+	tsURL := setupTest(t)
+
+	_, _ = executeCommand("add", tsURL+"/feed.xml")
+
+	out, err := executeCommand("fetch", "--feed-id", "1", "--json")
+	if err != nil {
+		t.Fatalf("fetch --feed-id --json failed: %v", err)
+	}
+	// Should output a JSON array (possibly empty if entries were already fetched during add).
+	if !strings.Contains(out, "[") {
+		t.Errorf("expected JSON array in output: %s", out)
+	}
+}

@@ -73,8 +73,10 @@ func executeCommand(args ...string) (string, error) {
 // from one test does not leak into the next.
 func resetFlags() {
 	addTitle = ""
+	addJSON = false
 	listJSON = false
 	fetchFeedID = 0
+	fetchJSON = false
 	entriesFeedID = 0
 	entriesLimit = 20
 	entriesJSON = false
@@ -88,6 +90,9 @@ func resetFlags() {
 	updateURL = ""
 	searchLimit = 20
 	searchJSON = false
+	discoverJSON = false
+	duplicatesJSON = false
+	tagsJSON = false
 }
 
 const testRSSFeed = `<?xml version="1.0" encoding="UTF-8"?>
