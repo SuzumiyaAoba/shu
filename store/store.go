@@ -8,6 +8,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/SuzumiyaAoba/shu/core"
 )
@@ -36,6 +37,7 @@ type Store interface {
 	// exist (deduplicated by the UNIQUE(feed_id, guid) constraint). Returns
 	// the count of newly inserted rows.
 	AddEntries(ctx context.Context, entries []*core.Entry) (int, error)
+	GetEntry(ctx context.Context, id int64) (*core.Entry, error)
 	// ListEntries queries entries matching the filter. Results are ordered by
 	// fetched_at descending (newest first).
 	ListEntries(ctx context.Context, filter core.EntryFilter) ([]*core.Entry, error)
@@ -63,6 +65,17 @@ type Store interface {
 
 	// SearchEntries performs full-text search on entries.
 	SearchEntries(ctx context.Context, query string, limit int) ([]*core.Entry, error)
+
+	StarEntry(ctx context.Context, id int64) error
+	UnstarEntry(ctx context.Context, id int64) error
+
+	RecordFeedError(ctx context.Context, id int64, errMsg string) error
+	ResetFeedError(ctx context.Context, id int64) error
+	SetFeedDisabled(ctx context.Context, id int64, disabled bool) error
+
+	FeedStats(ctx context.Context) ([]core.FeedStats, error)
+	CleanupEntries(ctx context.Context, olderThan time.Time) (int, error)
+	FindDuplicateEntries(ctx context.Context, entryID int64) ([]*core.Entry, error)
 
 	// Close releases database connections and other resources.
 	Close() error

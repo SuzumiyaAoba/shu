@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/SuzumiyaAoba/shu/core"
 	"github.com/SuzumiyaAoba/shu/store"
@@ -78,8 +79,11 @@ func resetFlags() {
 	entriesLimit = 20
 	entriesJSON = false
 	entriesUnread = false
+	entriesStarred = false
 	entriesTag = ""
 	entriesFormat = ""
+	statsJSON = false
+	cleanupOlderThan = 90 * 24 * time.Hour
 	updateTitle = ""
 	updateURL = ""
 	searchLimit = 20

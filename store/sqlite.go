@@ -21,10 +21,10 @@ import (
 var migrationsFS embed.FS
 
 // feedColumns is the SELECT column list shared by GetFeed and ListFeeds.
-const feedColumns = `id, url, title, site_url, added_at, fetched_at, description, language, image_url, feed_type, etag, last_modified`
+const feedColumns = `id, url, title, site_url, added_at, fetched_at, description, language, image_url, feed_type, etag, last_modified, error_count, last_error, disabled, fetch_interval_sec`
 
 // entryColumns is the SELECT column list shared by ListEntries.
-const entryColumns = `id, feed_id, guid, title, link, summary, published_at, fetched_at, content, author, image_url, categories, updated_at, enclosures, authors, links, contributors, rights, source, read_at`
+const entryColumns = `id, feed_id, guid, title, link, summary, published_at, fetched_at, content, author, image_url, categories, updated_at, enclosures, authors, links, contributors, rights, source, read_at, starred_at`
 
 // SQLiteStore implements [Store] using a SQLite database via the pure-Go
 // modernc.org/sqlite driver (no CGo required).
@@ -54,6 +54,10 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
+
+	// SQLite supports limited concurrency. Use a single connection to avoid
+	// "database is locked" errors, especially with in-memory databases.
+	db.SetMaxOpenConns(1)
 
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		db.Close()
@@ -260,6 +264,12 @@ func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (in
 //   - Limit: caps the number of rows returned (0 = unlimited).
 //   - Offset: skips the first N rows for pagination.
 //
+// GetEntry retrieves a single entry by its primary key.
+func (s *SQLiteStore) GetEntry(ctx context.Context, id int64) (*core.Entry, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT `+entryColumns+` FROM entries WHERE id = ?`, id)
+	return scanEntry(row)
+}
+
 // Results are always ordered by fetched_at DESC (newest first).
 func (s *SQLiteStore) ListEntries(ctx context.Context, filter core.EntryFilter) ([]*core.Entry, error) {
 	query := `SELECT ` + entryColumns + ` FROM entries`
@@ -278,6 +288,10 @@ func (s *SQLiteStore) ListEntries(ctx context.Context, filter core.EntryFilter) 
 	if filter.Tag != "" {
 		conditions = append(conditions, `feed_id IN (SELECT ft.feed_id FROM feed_tags ft JOIN tags t ON t.id = ft.tag_id WHERE t.name = ?)`)
 		args = append(args, filter.Tag)
+	}
+
+	if filter.StarredOnly {
+		conditions = append(conditions, `starred_at IS NOT NULL`)
 	}
 
 	if len(conditions) > 0 {
@@ -330,10 +344,12 @@ func scanFeed(s scanner) (*core.Feed, error) {
 	var addedAt string
 	var fetchedAt *string
 
+	var disabled int
 	if err := s.Scan(
 		&f.ID, &f.URL, &f.Title, &f.SiteURL, &addedAt, &fetchedAt,
 		&f.Description, &f.Language, &f.ImageURL, &f.FeedType,
 		&f.ETag, &f.LastModified,
+		&f.ErrorCount, &f.LastError, &disabled, &f.FetchIntervalSec,
 	); err != nil {
 		return nil, fmt.Errorf("scan feed: %w", err)
 	}
@@ -352,6 +368,8 @@ func scanFeed(s scanner) (*core.Feed, error) {
 		f.FetchedAt = &t
 	}
 
+	f.Disabled = disabled != 0
+
 	return &f, nil
 }
 
@@ -364,13 +382,14 @@ func scanEntry(s scanner) (*core.Entry, error) {
 	var fetchedAt string
 	var updatedAt *string
 	var readAt *string
+	var starredAt *string
 
 	if err := s.Scan(
 		&e.ID, &e.FeedID, &e.GUID, &e.Title, &e.Link, &e.Summary,
 		&publishedAt, &fetchedAt,
 		&e.Content, &e.Author, &e.ImageURL, &e.Categories, &updatedAt, &e.Enclosures,
 		&e.Authors, &e.Links, &e.Contributors, &e.Rights, &e.Source,
-		&readAt,
+		&readAt, &starredAt,
 	); err != nil {
 		return nil, fmt.Errorf("scan entry: %w", err)
 	}
@@ -403,6 +422,14 @@ func scanEntry(s scanner) (*core.Entry, error) {
 			return nil, fmt.Errorf("parse read_at: %w", err)
 		}
 		e.ReadAt = &t
+	}
+
+	if starredAt != nil {
+		t, err := time.Parse(time.RFC3339, *starredAt)
+		if err != nil {
+			return nil, fmt.Errorf("parse starred_at: %w", err)
+		}
+		e.StarredAt = &t
 	}
 
 	return &e, nil
@@ -579,6 +606,144 @@ func (s *SQLiteStore) SearchEntries(ctx context.Context, query string, limit int
 	)
 	if err != nil {
 		return nil, fmt.Errorf("search entries: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []*core.Entry
+	for rows.Next() {
+		e, err := scanEntry(rows)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+// StarEntry sets the starred_at timestamp on the given entry.
+func (s *SQLiteStore) StarEntry(ctx context.Context, id int64) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx, `UPDATE entries SET starred_at = ? WHERE id = ?`, now, id)
+	if err != nil {
+		return fmt.Errorf("star entry: %w", err)
+	}
+	return nil
+}
+
+// UnstarEntry clears the starred_at timestamp on the given entry.
+func (s *SQLiteStore) UnstarEntry(ctx context.Context, id int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE entries SET starred_at = NULL WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("unstar entry: %w", err)
+	}
+	return nil
+}
+
+// maxErrorCount is the number of consecutive failures before a feed is
+// automatically disabled.
+const maxErrorCount = 5
+
+// RecordFeedError increments the error count and stores the error message.
+// If the count reaches maxErrorCount the feed is automatically disabled.
+func (s *SQLiteStore) RecordFeedError(ctx context.Context, id int64, errMsg string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE feeds SET error_count = error_count + 1, last_error = ?, disabled = CASE WHEN error_count + 1 >= ? THEN 1 ELSE disabled END WHERE id = ?`,
+		errMsg, maxErrorCount, id,
+	)
+	if err != nil {
+		return fmt.Errorf("record feed error: %w", err)
+	}
+	return nil
+}
+
+// ResetFeedError clears the error count and last error after a successful fetch.
+func (s *SQLiteStore) ResetFeedError(ctx context.Context, id int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE feeds SET error_count = 0, last_error = '' WHERE id = ?`, id,
+	)
+	if err != nil {
+		return fmt.Errorf("reset feed error: %w", err)
+	}
+	return nil
+}
+
+// SetFeedDisabled enables or disables a feed.
+func (s *SQLiteStore) SetFeedDisabled(ctx context.Context, id int64, disabled bool) error {
+	val := 0
+	if disabled {
+		val = 1
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE feeds SET disabled = ? WHERE id = ?`, val, id)
+	if err != nil {
+		return fmt.Errorf("set feed disabled: %w", err)
+	}
+	return nil
+}
+
+// FeedStats returns aggregate statistics for all feeds.
+func (s *SQLiteStore) FeedStats(ctx context.Context) ([]core.FeedStats, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT
+			f.id, f.title, f.url,
+			COUNT(e.id) AS total,
+			SUM(CASE WHEN e.read_at IS NULL THEN 1 ELSE 0 END) AS unread,
+			SUM(CASE WHEN e.starred_at IS NOT NULL THEN 1 ELSE 0 END) AS starred,
+			f.fetched_at, f.error_count, f.last_error, f.disabled
+		FROM feeds f
+		LEFT JOIN entries e ON e.feed_id = f.id
+		GROUP BY f.id
+		ORDER BY f.id
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("feed stats: %w", err)
+	}
+	defer rows.Close()
+
+	var stats []core.FeedStats
+	for rows.Next() {
+		var st core.FeedStats
+		var fetchedAt *string
+		var disabled int
+		if err := rows.Scan(
+			&st.FeedID, &st.Title, &st.URL,
+			&st.TotalCount, &st.UnreadCount, &st.StarredCount,
+			&fetchedAt, &st.ErrorCount, &st.LastError, &disabled,
+		); err != nil {
+			return nil, fmt.Errorf("scan feed stats: %w", err)
+		}
+		if fetchedAt != nil {
+			t, _ := time.Parse(time.RFC3339, *fetchedAt)
+			st.FetchedAt = &t
+		}
+		st.Disabled = disabled != 0
+		stats = append(stats, st)
+	}
+	return stats, rows.Err()
+}
+
+// CleanupEntries deletes entries older than the given time, excluding starred
+// entries. Returns the number of deleted entries.
+func (s *SQLiteStore) CleanupEntries(ctx context.Context, olderThan time.Time) (int, error) {
+	cutoff := olderThan.UTC().Format(time.RFC3339)
+	result, err := s.db.ExecContext(ctx,
+		`DELETE FROM entries WHERE fetched_at < ? AND starred_at IS NULL`, cutoff,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("cleanup entries: %w", err)
+	}
+	n, _ := result.RowsAffected()
+	return int(n), nil
+}
+
+// FindDuplicateEntries returns entries from other feeds that share the same
+// link URL as the given entry.
+func (s *SQLiteStore) FindDuplicateEntries(ctx context.Context, entryID int64) ([]*core.Entry, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+entryColumns+` FROM entries WHERE link = (SELECT link FROM entries WHERE id = ?) AND id != ? AND link != ''`,
+		entryID, entryID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find duplicates: %w", err)
 	}
 	defer rows.Close()
 

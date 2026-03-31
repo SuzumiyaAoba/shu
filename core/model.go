@@ -41,6 +41,15 @@ type Feed struct {
 	// LastModified is the HTTP Last-Modified header value from the last
 	// successful fetch. Used together with ETag for conditional GET requests.
 	LastModified string
+	// ErrorCount is the number of consecutive fetch failures.
+	ErrorCount int
+	// LastError is the error message from the most recent failed fetch.
+	LastError string
+	// Disabled indicates the feed is temporarily disabled due to repeated failures.
+	Disabled bool
+	// FetchIntervalSec is a per-feed override for the fetch interval in seconds.
+	// 0 means use the global default.
+	FetchIntervalSec int
 }
 
 // Entry represents a single article or item from an RSS/Atom feed.
@@ -113,6 +122,9 @@ type Entry struct {
 	// ReadAt records when the entry was marked as read by the user.
 	// It is nil if the entry has not been read yet.
 	ReadAt *time.Time
+	// StarredAt records when the entry was bookmarked/starred.
+	// It is nil if the entry has not been starred.
+	StarredAt *time.Time
 }
 
 // EntryFilter specifies criteria for querying stored entries.
@@ -131,6 +143,8 @@ type EntryFilter struct {
 	// Tag, when non-empty, restricts results to entries from feeds that have
 	// the specified tag.
 	Tag string
+	// StarredOnly, when true, restricts results to starred entries.
+	StarredOnly bool
 }
 
 // FeedUpdate holds the mutable fields for updating a feed.
@@ -144,4 +158,18 @@ type FeedUpdate struct {
 type Tag struct {
 	ID   int64
 	Name string
+}
+
+// FeedStats holds aggregate statistics for a single feed.
+type FeedStats struct {
+	FeedID     int64
+	Title      string
+	URL        string
+	TotalCount int
+	UnreadCount int
+	StarredCount int
+	FetchedAt  *time.Time
+	ErrorCount int
+	LastError  string
+	Disabled   bool
 }

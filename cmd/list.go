@@ -33,13 +33,19 @@ var listCmd = &cobra.Command{
 		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tTITLE\tURL\tFETCHED")
+		fmt.Fprintln(w, "ID\tTITLE\tURL\tFETCHED\tSTATUS")
 		for _, f := range feeds {
 			fetched := "-"
 			if f.FetchedAt != nil {
 				fetched = f.FetchedAt.Format("2006-01-02 15:04")
 			}
-			fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", f.ID, f.Title, f.URL, fetched)
+			status := "ok"
+			if f.Disabled {
+				status = "disabled"
+			} else if f.ErrorCount > 0 {
+				status = fmt.Sprintf("err(%d)", f.ErrorCount)
+			}
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", f.ID, f.Title, f.URL, fetched, status)
 		}
 		return w.Flush()
 	},

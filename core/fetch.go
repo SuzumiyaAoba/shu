@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/mmcdole/gofeed"
 	"github.com/mmcdole/gofeed/atom"
@@ -67,9 +68,17 @@ func (s *Service) FetchFeed(ctx context.Context, feedID int64) ([]*Entry, error)
 		return nil, fmt.Errorf("get feed %d: %w", feedID, err)
 	}
 
+	// Skip disabled feeds.
+	if feed.Disabled {
+		s.logger.Warn("feed disabled, skipping", "id", feedID, "title", feed.Title)
+		return nil, nil
+	}
+
 	// Fetch the feed body with conditional GET support.
 	body, headers, err := s.fetchBodyConditional(ctx, feed.URL, feed.ETag, feed.LastModified)
 	if err != nil {
+		// Record the error for health monitoring.
+		_ = s.store.RecordFeedError(ctx, feedID, err.Error())
 		return nil, fmt.Errorf("fetch feed %s: %w", feed.URL, err)
 	}
 
@@ -124,6 +133,9 @@ func (s *Service) FetchFeed(ctx context.Context, feedID int64) ([]*Entry, error)
 	if err := s.store.UpdateFeedFetchedAt(ctx, feedID); err != nil {
 		return nil, fmt.Errorf("update fetched_at: %w", err)
 	}
+
+	// Reset error count on successful fetch.
+	_ = s.store.ResetFeedError(ctx, feedID)
 
 	s.logger.Info("feed fetched", "id", feedID, "title", feed.Title, "new_entries", inserted)
 
@@ -336,29 +348,69 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 	return e
 }
 
-// FetchAll fetches every registered feed sequentially and returns the total
-// number of new entries stored across all feeds.
+// FetchAll fetches every registered feed concurrently (up to 10 at a time) and
+// returns the total number of new entries stored across all feeds.
 //
 // If an individual feed fails to fetch (network error, parse error, etc.), the
 // error is logged and the method continues with the remaining feeds. This
 // ensures that a single broken feed does not block updates for others.
+//
+// Feeds that have a per-feed interval set and were fetched more recently than
+// that interval are skipped.
 func (s *Service) FetchAll(ctx context.Context) (int, error) {
 	feeds, err := s.store.ListFeeds(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("list feeds: %w", err)
 	}
 
-	total := 0
+	// Filter feeds that should be fetched.
+	var toFetch []*Feed
 	for _, feed := range feeds {
-		entries, err := s.FetchFeed(ctx, feed.ID)
-		if err != nil {
-			s.logger.Error("failed to fetch feed", "id", feed.ID, "url", feed.URL, "error", err)
-			continue
+		if feed.FetchIntervalSec > 0 && feed.FetchedAt != nil {
+			if time.Since(*feed.FetchedAt) < time.Duration(feed.FetchIntervalSec)*time.Second {
+				continue
+			}
 		}
-		total += len(entries)
+		toFetch = append(toFetch, feed)
+	}
+
+	if len(toFetch) == 0 {
+		return 0, nil
+	}
+
+	type result struct {
+		count int
+	}
+
+	results := make(chan result, len(toFetch))
+	sem := make(chan struct{}, 10) // concurrency limit
+
+	for _, feed := range toFetch {
+		sem <- struct{}{}
+		go func(f *Feed) {
+			defer func() { <-sem }()
+			entries, err := s.FetchFeed(ctx, f.ID)
+			if err != nil {
+				s.logger.Error("failed to fetch feed", "id", f.ID, "url", f.URL, "error", err)
+				results <- result{0}
+				return
+			}
+			results <- result{len(entries)}
+		}(feed)
+	}
+
+	total := 0
+	for range toFetch {
+		r := <-results
+		total += r.count
 	}
 
 	return total, nil
+}
+
+// GetEntry retrieves a single entry by its primary key.
+func (s *Service) GetEntry(ctx context.Context, id int64) (*Entry, error) {
+	return s.store.GetEntry(ctx, id)
 }
 
 // ListEntries retrieves stored entries matching the given filter criteria.

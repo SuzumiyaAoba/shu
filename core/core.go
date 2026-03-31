@@ -33,6 +33,8 @@ type Store interface {
 	// AddEntries inserts entries that do not already exist (deduplicated by
 	// the feed_id + GUID pair). It returns the number of newly inserted rows.
 	AddEntries(ctx context.Context, entries []*Entry) (int, error)
+	// GetEntry retrieves a single entry by its primary key.
+	GetEntry(ctx context.Context, id int64) (*Entry, error)
 	// ListEntries returns entries matching the given filter, ordered by
 	// fetched_at descending (newest first).
 	ListEntries(ctx context.Context, filter EntryFilter) ([]*Entry, error)
@@ -63,6 +65,30 @@ type Store interface {
 	// SearchEntries performs full-text search across entry titles, summaries,
 	// and content. Returns matching entries ordered by relevance.
 	SearchEntries(ctx context.Context, query string, limit int) ([]*Entry, error)
+
+	// StarEntry sets the starred_at timestamp on the given entry.
+	StarEntry(ctx context.Context, id int64) error
+	// UnstarEntry clears the starred_at timestamp on the given entry.
+	UnstarEntry(ctx context.Context, id int64) error
+
+	// RecordFeedError increments the error count and stores the error message.
+	// If the error count reaches the threshold, the feed is automatically disabled.
+	RecordFeedError(ctx context.Context, id int64, errMsg string) error
+	// ResetFeedError clears the error count and last error after a successful fetch.
+	ResetFeedError(ctx context.Context, id int64) error
+	// SetFeedDisabled enables or disables a feed.
+	SetFeedDisabled(ctx context.Context, id int64, disabled bool) error
+
+	// FeedStats returns aggregate statistics for all feeds.
+	FeedStats(ctx context.Context) ([]FeedStats, error)
+
+	// CleanupEntries deletes entries older than the given time, excluding starred.
+	// Returns the number of deleted entries.
+	CleanupEntries(ctx context.Context, olderThan time.Time) (int, error)
+
+	// FindDuplicateEntries returns entries from other feeds that share the same
+	// link URL as the given entry.
+	FindDuplicateEntries(ctx context.Context, entryID int64) ([]*Entry, error)
 
 	// Close releases any resources held by the store (e.g. database connections).
 	Close() error

@@ -583,3 +583,227 @@ func TestSearchEntries(t *testing.T) {
 		t.Errorf("got %d results, want 1", len(results))
 	}
 }
+
+func TestStarUnstarEntry(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	_ = s.AddFeed(ctx, feed)
+
+	_, _ = s.AddEntries(ctx, []*core.Entry{
+		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+	})
+
+	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 1})
+	id := entries[0].ID
+
+	if err := s.StarEntry(ctx, id); err != nil {
+		t.Fatalf("StarEntry failed: %v", err)
+	}
+
+	entries, _ = s.ListEntries(ctx, core.EntryFilter{Limit: 1})
+	if entries[0].StarredAt == nil {
+		t.Error("expected StarredAt to be set")
+	}
+
+	// Starred filter.
+	starred, _ := s.ListEntries(ctx, core.EntryFilter{StarredOnly: true, Limit: 10})
+	if len(starred) != 1 {
+		t.Errorf("got %d starred, want 1", len(starred))
+	}
+
+	if err := s.UnstarEntry(ctx, id); err != nil {
+		t.Fatalf("UnstarEntry failed: %v", err)
+	}
+
+	starred, _ = s.ListEntries(ctx, core.EntryFilter{StarredOnly: true, Limit: 10})
+	if len(starred) != 0 {
+		t.Errorf("got %d starred after unstar, want 0", len(starred))
+	}
+}
+
+func TestFeedHealthTracking(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	_ = s.AddFeed(ctx, feed)
+
+	// Record errors.
+	for i := 0; i < 3; i++ {
+		_ = s.RecordFeedError(ctx, feed.ID, "connection timeout")
+	}
+
+	got, _ := s.GetFeed(ctx, feed.ID)
+	if got.ErrorCount != 3 {
+		t.Errorf("ErrorCount = %d, want 3", got.ErrorCount)
+	}
+	if got.LastError != "connection timeout" {
+		t.Errorf("LastError = %q", got.LastError)
+	}
+	if got.Disabled {
+		t.Error("should not be disabled yet (threshold is 5)")
+	}
+
+	// Hit the threshold (5 total).
+	_ = s.RecordFeedError(ctx, feed.ID, "timeout")
+	_ = s.RecordFeedError(ctx, feed.ID, "timeout")
+
+	got, _ = s.GetFeed(ctx, feed.ID)
+	if !got.Disabled {
+		t.Error("expected feed to be auto-disabled after 5 errors")
+	}
+
+	// Reset.
+	_ = s.ResetFeedError(ctx, feed.ID)
+	got, _ = s.GetFeed(ctx, feed.ID)
+	if got.ErrorCount != 0 {
+		t.Errorf("ErrorCount = %d after reset, want 0", got.ErrorCount)
+	}
+}
+
+func TestSetFeedDisabled(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	_ = s.AddFeed(ctx, feed)
+
+	_ = s.SetFeedDisabled(ctx, feed.ID, true)
+	got, _ := s.GetFeed(ctx, feed.ID)
+	if !got.Disabled {
+		t.Error("expected disabled")
+	}
+
+	_ = s.SetFeedDisabled(ctx, feed.ID, false)
+	got, _ = s.GetFeed(ctx, feed.ID)
+	if got.Disabled {
+		t.Error("expected enabled")
+	}
+}
+
+func TestFeedStats(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	_ = s.AddFeed(ctx, feed)
+
+	_, _ = s.AddEntries(ctx, []*core.Entry{
+		{FeedID: feed.ID, GUID: "1", Title: "E1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "2", Title: "E2", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+	})
+
+	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 1})
+	_ = s.MarkEntryRead(ctx, entries[0].ID)
+	_ = s.StarEntry(ctx, entries[0].ID)
+
+	stats, err := s.FeedStats(ctx)
+	if err != nil {
+		t.Fatalf("FeedStats failed: %v", err)
+	}
+	if len(stats) != 1 {
+		t.Fatalf("got %d stats, want 1", len(stats))
+	}
+	if stats[0].TotalCount != 2 {
+		t.Errorf("TotalCount = %d, want 2", stats[0].TotalCount)
+	}
+	if stats[0].UnreadCount != 1 {
+		t.Errorf("UnreadCount = %d, want 1", stats[0].UnreadCount)
+	}
+	if stats[0].StarredCount != 1 {
+		t.Errorf("StarredCount = %d, want 1", stats[0].StarredCount)
+	}
+}
+
+func TestCleanupEntries(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	_ = s.AddFeed(ctx, feed)
+
+	_, _ = s.AddEntries(ctx, []*core.Entry{
+		{FeedID: feed.ID, GUID: "1", Title: "Old Entry", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "2", Title: "Starred Old", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+	})
+
+	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 10})
+	// Star one entry — should survive cleanup.
+	_ = s.StarEntry(ctx, entries[0].ID)
+
+	// Delete everything older than 0 (i.e., everything).
+	deleted, err := s.CleanupEntries(ctx, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("CleanupEntries failed: %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("deleted = %d, want 1 (starred should survive)", deleted)
+	}
+
+	remaining, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 10})
+	if len(remaining) != 1 {
+		t.Errorf("remaining = %d, want 1", len(remaining))
+	}
+}
+
+func TestGetEntry(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	_ = s.AddFeed(ctx, feed)
+
+	_, _ = s.AddEntries(ctx, []*core.Entry{
+		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Link: "https://example.com/1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+	})
+
+	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 1})
+	id := entries[0].ID
+
+	got, err := s.GetEntry(ctx, id)
+	if err != nil {
+		t.Fatalf("GetEntry failed: %v", err)
+	}
+	if got.Title != "Entry 1" {
+		t.Errorf("Title = %q, want %q", got.Title, "Entry 1")
+	}
+}
+
+func TestFindDuplicateEntries(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed1 := &core.Feed{URL: "https://a.com/feed", Title: "A"}
+	feed2 := &core.Feed{URL: "https://b.com/feed", Title: "B"}
+	_ = s.AddFeed(ctx, feed1)
+	_ = s.AddFeed(ctx, feed2)
+
+	_, _ = s.AddEntries(ctx, []*core.Entry{
+		{FeedID: feed1.ID, GUID: "a1", Title: "Shared Article", Link: "https://example.com/article", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed2.ID, GUID: "b1", Title: "Same Article", Link: "https://example.com/article", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed2.ID, GUID: "b2", Title: "Different Article", Link: "https://example.com/other", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+	})
+
+	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 10})
+	// Find the first entry (from feed1).
+	var targetID int64
+	for _, e := range entries {
+		if e.GUID == "a1" {
+			targetID = e.ID
+			break
+		}
+	}
+
+	dupes, err := s.FindDuplicateEntries(ctx, targetID)
+	if err != nil {
+		t.Fatalf("FindDuplicateEntries failed: %v", err)
+	}
+	if len(dupes) != 1 {
+		t.Errorf("got %d duplicates, want 1", len(dupes))
+	}
+	if len(dupes) > 0 && dupes[0].Title != "Same Article" {
+		t.Errorf("duplicate title = %q, want %q", dupes[0].Title, "Same Article")
+	}
+}

@@ -10,12 +10,13 @@ import (
 )
 
 var (
-	entriesFeedID int64
-	entriesLimit  int
-	entriesJSON   bool
-	entriesUnread bool
-	entriesTag    string
-	entriesFormat string
+	entriesFeedID  int64
+	entriesLimit   int
+	entriesJSON    bool
+	entriesUnread  bool
+	entriesStarred bool
+	entriesTag     string
+	entriesFormat  string
 )
 
 var entriesCmd = &cobra.Command{
@@ -23,9 +24,10 @@ var entriesCmd = &cobra.Command{
 	Short: "List stored entries",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		filter := core.EntryFilter{
-			Limit:      entriesLimit,
-			UnreadOnly: entriesUnread,
-			Tag:        entriesTag,
+			Limit:       entriesLimit,
+			UnreadOnly:  entriesUnread,
+			StarredOnly: entriesStarred,
+			Tag:         entriesTag,
 		}
 		if entriesFeedID > 0 {
 			filter.FeedID = &entriesFeedID
@@ -92,6 +94,7 @@ func init() {
 	entriesCmd.Flags().IntVar(&entriesLimit, "limit", 20, "max entries to show")
 	entriesCmd.Flags().BoolVar(&entriesJSON, "json", false, "output as JSON")
 	entriesCmd.Flags().BoolVar(&entriesUnread, "unread", false, "show only unread entries")
+	entriesCmd.Flags().BoolVar(&entriesStarred, "starred", false, "show only starred entries")
 	entriesCmd.Flags().StringVar(&entriesTag, "tag", "", "filter by feed tag")
 	entriesCmd.Flags().StringVar(&entriesFormat, "format", "", "output format: markdown")
 	rootCmd.AddCommand(entriesCmd)
