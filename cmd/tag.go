@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strconv"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -13,9 +12,9 @@ var tagCmd = &cobra.Command{
 	Short: "Add a tag to a feed",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := strconv.ParseInt(args[0], 10, 64)
+		id, err := parseIDArg(args[0])
 		if err != nil {
-			return fmt.Errorf("invalid feed ID: %w", err)
+			return err
 		}
 		if err := svc.AddTag(cmd.Context(), id, args[1]); err != nil {
 			return err
@@ -30,9 +29,9 @@ var untagCmd = &cobra.Command{
 	Short: "Remove a tag from a feed",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := strconv.ParseInt(args[0], 10, 64)
+		id, err := parseIDArg(args[0])
 		if err != nil {
-			return fmt.Errorf("invalid feed ID: %w", err)
+			return err
 		}
 		if err := svc.RemoveTag(cmd.Context(), id, args[1]); err != nil {
 			return err
@@ -50,9 +49,9 @@ var tagsCmd = &cobra.Command{
 		ctx := cmd.Context()
 
 		if len(args) == 1 {
-			id, err := strconv.ParseInt(args[0], 10, 64)
+			id, err := parseIDArg(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid feed ID: %w", err)
+				return err
 			}
 			tags, err := svc.ListTags(ctx, id)
 			if err != nil {

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os/exec"
 	"runtime"
-	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -14,9 +13,9 @@ var openCmd = &cobra.Command{
 	Short: "Open an entry in the default browser",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := strconv.ParseInt(args[0], 10, 64)
+		id, err := parseIDArg(args[0])
 		if err != nil {
-			return fmt.Errorf("invalid entry ID: %w", err)
+			return err
 		}
 
 		entry, err := svc.GetEntry(cmd.Context(), id)
@@ -28,8 +27,10 @@ var openCmd = &cobra.Command{
 			return fmt.Errorf("entry #%d has no link", id)
 		}
 
-		// Mark as read when opening.
-		_ = svc.MarkEntryRead(cmd.Context(), id)
+		// Best-effort mark as read when opening.
+		if err := svc.MarkEntryRead(cmd.Context(), id); err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not mark entry as read: %v\n", err)
+		}
 
 		fmt.Fprintf(cmd.OutOrStdout(), "Opening %s\n", entry.Link)
 		return openBrowser(entry.Link)

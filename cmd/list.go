@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"text/tabwriter"
 
@@ -27,9 +26,7 @@ var listCmd = &cobra.Command{
 		}
 
 		if listJSON {
-			enc := json.NewEncoder(cmd.OutOrStdout())
-			enc.SetIndent("", "  ")
-			return enc.Encode(feeds)
+			return writeJSON(cmd.OutOrStdout(), feeds)
 		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
@@ -39,12 +36,7 @@ var listCmd = &cobra.Command{
 			if f.FetchedAt != nil {
 				fetched = f.FetchedAt.Format("2006-01-02 15:04")
 			}
-			status := "ok"
-			if f.Disabled {
-				status = "disabled"
-			} else if f.ErrorCount > 0 {
-				status = fmt.Sprintf("err(%d)", f.ErrorCount)
-			}
+			status := feedStatus(f.Disabled, f.ErrorCount)
 			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", f.ID, f.Title, f.URL, fetched, status)
 		}
 		return w.Flush()

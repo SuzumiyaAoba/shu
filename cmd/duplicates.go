@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strconv"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -13,9 +12,9 @@ var duplicatesCmd = &cobra.Command{
 	Short: "Find entries from other feeds with the same link",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := strconv.ParseInt(args[0], 10, 64)
+		id, err := parseIDArg(args[0])
 		if err != nil {
-			return fmt.Errorf("invalid entry ID: %w", err)
+			return err
 		}
 
 		dupes, err := svc.FindDuplicateEntries(cmd.Context(), id)

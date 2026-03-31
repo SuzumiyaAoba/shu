@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -12,9 +11,9 @@ var starCmd = &cobra.Command{
 	Short: "Bookmark an entry",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := strconv.ParseInt(args[0], 10, 64)
+		id, err := parseIDArg(args[0])
 		if err != nil {
-			return fmt.Errorf("invalid entry ID: %w", err)
+			return err
 		}
 		if err := svc.StarEntry(cmd.Context(), id); err != nil {
 			return err
@@ -29,9 +28,9 @@ var unstarCmd = &cobra.Command{
 	Short: "Remove bookmark from an entry",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := strconv.ParseInt(args[0], 10, 64)
+		id, err := parseIDArg(args[0])
 		if err != nil {
-			return fmt.Errorf("invalid entry ID: %w", err)
+			return err
 		}
 		if err := svc.UnstarEntry(cmd.Context(), id); err != nil {
 			return err

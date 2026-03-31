@@ -13,70 +13,64 @@ import (
 	"github.com/SuzumiyaAoba/shu/core"
 )
 
-// Store defines the data access interface for feeds and entries.
-// This interface mirrors [core.Store] and is satisfied by [SQLiteStore].
-// It exists in the store package to allow type-asserting or referencing the
-// store-specific interface when needed, while the core package depends only on
-// its own copy of the interface.
-type Store interface {
-	// AddFeed persists a new feed record. On success, the feed's ID and
-	// AddedAt fields are populated in place.
+// FeedStore handles feed CRUD operations.
+type FeedStore interface {
 	AddFeed(ctx context.Context, feed *core.Feed) error
-	// GetFeed retrieves a feed by its primary key. Returns an error if not found.
 	GetFeed(ctx context.Context, id int64) (*core.Feed, error)
-	// ListFeeds returns all feeds ordered by ID.
 	ListFeeds(ctx context.Context) ([]*core.Feed, error)
-	// RemoveFeed deletes a feed by ID. Associated entries are cascade-deleted
-	// by the database's ON DELETE CASCADE constraint.
 	RemoveFeed(ctx context.Context, id int64) error
-	// UpdateFeedFetchedAt sets the feed's fetched_at column to the current
-	// UTC time, recording a successful fetch cycle.
-	UpdateFeedFetchedAt(ctx context.Context, id int64) error
-
-	// AddEntries bulk-inserts entries, silently skipping any that already
-	// exist (deduplicated by the UNIQUE(feed_id, guid) constraint). Returns
-	// the count of newly inserted rows.
-	AddEntries(ctx context.Context, entries []*core.Entry) (int, error)
-	GetEntry(ctx context.Context, id int64) (*core.Entry, error)
-	// ListEntries queries entries matching the filter. Results are ordered by
-	// fetched_at descending (newest first).
-	ListEntries(ctx context.Context, filter core.EntryFilter) ([]*core.Entry, error)
-
-	// UpdateFeed updates mutable feed fields.
 	UpdateFeed(ctx context.Context, id int64, update core.FeedUpdate) error
-	// UpdateFeedCacheHeaders stores HTTP cache headers for conditional GET.
+	UpdateFeedFetchedAt(ctx context.Context, id int64) error
 	UpdateFeedCacheHeaders(ctx context.Context, id int64, etag, lastModified string) error
+}
 
-	// MarkEntryRead sets the read_at timestamp on the given entry.
-	MarkEntryRead(ctx context.Context, id int64) error
-	// MarkEntryUnread clears the read_at timestamp on the given entry.
-	MarkEntryUnread(ctx context.Context, id int64) error
-
-	// AddTag creates a tag and associates it with a feed.
-	AddTag(ctx context.Context, feedID int64, tagName string) error
-	// RemoveTag removes a tag association from a feed.
-	RemoveTag(ctx context.Context, feedID int64, tagName string) error
-	// ListTags returns all tags for a feed.
-	ListTags(ctx context.Context, feedID int64) ([]core.Tag, error)
-	// ListAllTags returns every tag.
-	ListAllTags(ctx context.Context) ([]core.Tag, error)
-	// ListFeedsByTag returns feeds with the given tag.
-	ListFeedsByTag(ctx context.Context, tagName string) ([]*core.Feed, error)
-
-	// SearchEntries performs full-text search on entries.
-	SearchEntries(ctx context.Context, query string, limit int) ([]*core.Entry, error)
-
-	StarEntry(ctx context.Context, id int64) error
-	UnstarEntry(ctx context.Context, id int64) error
-
+// FeedHealthStore tracks feed fetch errors and disabled state.
+type FeedHealthStore interface {
 	RecordFeedError(ctx context.Context, id int64, errMsg string) error
 	ResetFeedError(ctx context.Context, id int64) error
 	SetFeedDisabled(ctx context.Context, id int64, disabled bool) error
+}
 
+// EntryStore handles entry persistence and queries.
+type EntryStore interface {
+	AddEntries(ctx context.Context, entries []*core.Entry) (int, error)
+	GetEntry(ctx context.Context, id int64) (*core.Entry, error)
+	ListEntries(ctx context.Context, filter core.EntryFilter) ([]*core.Entry, error)
+	SearchEntries(ctx context.Context, query string, limit int) ([]*core.Entry, error)
+	FindDuplicateEntries(ctx context.Context, entryID int64) ([]*core.Entry, error)
+}
+
+// EntryStateStore manages read/star state on entries.
+type EntryStateStore interface {
+	MarkEntryRead(ctx context.Context, id int64) error
+	MarkEntryUnread(ctx context.Context, id int64) error
+	StarEntry(ctx context.Context, id int64) error
+	UnstarEntry(ctx context.Context, id int64) error
+}
+
+// TagStore handles tag CRUD and feed-tag associations.
+type TagStore interface {
+	AddTag(ctx context.Context, feedID int64, tagName string) error
+	RemoveTag(ctx context.Context, feedID int64, tagName string) error
+	ListTags(ctx context.Context, feedID int64) ([]core.Tag, error)
+	ListAllTags(ctx context.Context) ([]core.Tag, error)
+	ListFeedsByTag(ctx context.Context, tagName string) ([]*core.Feed, error)
+}
+
+// MaintenanceStore provides housekeeping operations.
+type MaintenanceStore interface {
 	FeedStats(ctx context.Context) ([]core.FeedStats, error)
 	CleanupEntries(ctx context.Context, olderThan time.Time) (int, error)
-	FindDuplicateEntries(ctx context.Context, entryID int64) ([]*core.Entry, error)
+}
 
-	// Close releases database connections and other resources.
+// Store is the full persistence interface satisfied by [SQLiteStore].
+// It mirrors [core.Store] and composes all role-specific interfaces.
+type Store interface {
+	FeedStore
+	FeedHealthStore
+	EntryStore
+	EntryStateStore
+	TagStore
+	MaintenanceStore
 	Close() error
 }

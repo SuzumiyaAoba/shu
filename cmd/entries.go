@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"text/tabwriter"
 
@@ -39,9 +38,7 @@ var entriesCmd = &cobra.Command{
 		}
 
 		if entriesJSON {
-			enc := json.NewEncoder(cmd.OutOrStdout())
-			enc.SetIndent("", "  ")
-			return enc.Encode(entries)
+			return writeJSON(cmd.OutOrStdout(), entries)
 		}
 
 		if entriesFormat == "markdown" {

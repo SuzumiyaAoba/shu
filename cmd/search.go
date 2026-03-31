@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"text/tabwriter"
@@ -27,9 +26,7 @@ var searchCmd = &cobra.Command{
 		}
 
 		if searchJSON {
-			enc := json.NewEncoder(cmd.OutOrStdout())
-			enc.SetIndent("", "  ")
-			return enc.Encode(entries)
+			return writeJSON(cmd.OutOrStdout(), entries)
 		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)

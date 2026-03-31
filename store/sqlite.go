@@ -6,6 +6,7 @@ import (
 	"embed"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/SuzumiyaAoba/shu/core"
@@ -25,6 +26,32 @@ const feedColumns = `id, url, title, site_url, added_at, fetched_at, description
 
 // entryColumns is the SELECT column list shared by ListEntries.
 const entryColumns = `id, feed_id, guid, title, link, summary, published_at, fetched_at, content, author, image_url, categories, updated_at, enclosures, authors, links, contributors, rights, source, read_at, starred_at`
+
+// nowRFC3339 returns the current UTC time formatted as RFC 3339.
+func nowRFC3339() string {
+	return time.Now().UTC().Format(time.RFC3339)
+}
+
+// parseNullableTime parses a nullable RFC 3339 timestamp string into *time.Time.
+func parseNullableTime(s *string, field string) (*time.Time, error) {
+	if s == nil {
+		return nil, nil
+	}
+	t, err := time.Parse(time.RFC3339, *s)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", field, err)
+	}
+	return &t, nil
+}
+
+// formatNullableTime formats a *time.Time as an RFC 3339 string pointer.
+func formatNullableTime(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	s := t.UTC().Format(time.RFC3339)
+	return &s
+}
 
 // SQLiteStore implements [Store] using a SQLite database via the pure-Go
 // modernc.org/sqlite driver (no CGo required).
@@ -130,7 +157,7 @@ func (s *SQLiteStore) AddFeed(ctx context.Context, feed *core.Feed) error {
 	now := time.Now().UTC()
 	result, err := s.db.ExecContext(ctx,
 		`INSERT INTO feeds (url, title, site_url, added_at, description, language, image_url, feed_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		feed.URL, feed.Title, feed.SiteURL, now.Format(time.RFC3339),
+		feed.URL, feed.Title, feed.SiteURL, nowRFC3339(),
 		feed.Description, feed.Language, feed.ImageURL, feed.FeedType,
 	)
 	if err != nil {
@@ -191,9 +218,8 @@ func (s *SQLiteStore) RemoveFeed(ctx context.Context, id int64) error {
 // time. This is called after a successful fetch cycle to record when the feed
 // was last refreshed.
 func (s *SQLiteStore) UpdateFeedFetchedAt(ctx context.Context, id int64) error {
-	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE feeds SET fetched_at = ? WHERE id = ?`, now, id,
+		`UPDATE feeds SET fetched_at = ? WHERE id = ?`, nowRFC3339(), id,
 	)
 	if err != nil {
 		return fmt.Errorf("update fetched_at: %w", err)
@@ -229,19 +255,9 @@ func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (in
 
 	inserted := 0
 	for _, e := range entries {
-		var pubAt *string
-		if e.PublishedAt != nil {
-			s := e.PublishedAt.UTC().Format(time.RFC3339)
-			pubAt = &s
-		}
-		var updAt *string
-		if e.UpdatedAt != nil {
-			s := e.UpdatedAt.UTC().Format(time.RFC3339)
-			updAt = &s
-		}
 		result, err := stmt.ExecContext(ctx,
-			e.FeedID, e.GUID, e.Title, e.Link, e.Summary, pubAt,
-			e.Content, e.Author, e.ImageURL, e.Categories, updAt, e.Enclosures,
+			e.FeedID, e.GUID, e.Title, e.Link, e.Summary, formatNullableTime(e.PublishedAt),
+			e.Content, e.Author, e.ImageURL, e.Categories, formatNullableTime(e.UpdatedAt), e.Enclosures,
 			e.Authors, e.Links, e.Contributors, e.Rights, e.Source,
 		)
 		if err != nil {
@@ -295,10 +311,7 @@ func (s *SQLiteStore) ListEntries(ctx context.Context, filter core.EntryFilter) 
 	}
 
 	if len(conditions) > 0 {
-		query += ` WHERE ` + conditions[0]
-		for _, c := range conditions[1:] {
-			query += ` AND ` + c
-		}
+		query += ` WHERE ` + strings.Join(conditions, ` AND `)
 	}
 
 	query += ` ORDER BY fetched_at DESC`
@@ -360,12 +373,8 @@ func scanFeed(s scanner) (*core.Feed, error) {
 	}
 	f.AddedAt = t
 
-	if fetchedAt != nil {
-		t, err := time.Parse(time.RFC3339, *fetchedAt)
-		if err != nil {
-			return nil, fmt.Errorf("parse fetched_at: %w", err)
-		}
-		f.FetchedAt = &t
+	if f.FetchedAt, err = parseNullableTime(fetchedAt, "fetched_at"); err != nil {
+		return nil, err
 	}
 
 	f.Disabled = disabled != 0
@@ -400,36 +409,17 @@ func scanEntry(s scanner) (*core.Entry, error) {
 	}
 	e.FetchedAt = t
 
-	if publishedAt != nil {
-		t, err := time.Parse(time.RFC3339, *publishedAt)
-		if err != nil {
-			return nil, fmt.Errorf("parse published_at: %w", err)
-		}
-		e.PublishedAt = &t
+	if e.PublishedAt, err = parseNullableTime(publishedAt, "published_at"); err != nil {
+		return nil, err
 	}
-
-	if updatedAt != nil {
-		t, err := time.Parse(time.RFC3339, *updatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("parse updated_at: %w", err)
-		}
-		e.UpdatedAt = &t
+	if e.UpdatedAt, err = parseNullableTime(updatedAt, "updated_at"); err != nil {
+		return nil, err
 	}
-
-	if readAt != nil {
-		t, err := time.Parse(time.RFC3339, *readAt)
-		if err != nil {
-			return nil, fmt.Errorf("parse read_at: %w", err)
-		}
-		e.ReadAt = &t
+	if e.ReadAt, err = parseNullableTime(readAt, "read_at"); err != nil {
+		return nil, err
 	}
-
-	if starredAt != nil {
-		t, err := time.Parse(time.RFC3339, *starredAt)
-		if err != nil {
-			return nil, fmt.Errorf("parse starred_at: %w", err)
-		}
-		e.StarredAt = &t
+	if e.StarredAt, err = parseNullableTime(starredAt, "starred_at"); err != nil {
+		return nil, err
 	}
 
 	return &e, nil
@@ -455,11 +445,7 @@ func (s *SQLiteStore) UpdateFeed(ctx context.Context, id int64, update core.Feed
 	}
 
 	args = append(args, id)
-	query := "UPDATE feeds SET " + sets[0]
-	for _, s := range sets[1:] {
-		query += ", " + s
-	}
-	query += " WHERE id = ?"
+	query := "UPDATE feeds SET " + strings.Join(sets, ", ") + " WHERE id = ?"
 
 	_, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {
@@ -483,9 +469,8 @@ func (s *SQLiteStore) UpdateFeedCacheHeaders(ctx context.Context, id int64, etag
 
 // MarkEntryRead sets the read_at timestamp on the given entry.
 func (s *SQLiteStore) MarkEntryRead(ctx context.Context, id int64) error {
-	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE entries SET read_at = ? WHERE id = ?`, now, id,
+		`UPDATE entries SET read_at = ? WHERE id = ?`, nowRFC3339(), id,
 	)
 	if err != nil {
 		return fmt.Errorf("mark entry read: %w", err)
@@ -622,8 +607,7 @@ func (s *SQLiteStore) SearchEntries(ctx context.Context, query string, limit int
 
 // StarEntry sets the starred_at timestamp on the given entry.
 func (s *SQLiteStore) StarEntry(ctx context.Context, id int64) error {
-	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := s.db.ExecContext(ctx, `UPDATE entries SET starred_at = ? WHERE id = ?`, now, id)
+	_, err := s.db.ExecContext(ctx, `UPDATE entries SET starred_at = ? WHERE id = ?`, nowRFC3339(), id)
 	if err != nil {
 		return fmt.Errorf("star entry: %w", err)
 	}

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -12,9 +11,9 @@ var enableCmd = &cobra.Command{
 	Short: "Re-enable a disabled feed",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := strconv.ParseInt(args[0], 10, 64)
+		id, err := parseIDArg(args[0])
 		if err != nil {
-			return fmt.Errorf("invalid feed ID: %w", err)
+			return err
 		}
 		if err := svc.EnableFeed(cmd.Context(), id); err != nil {
 			return err
@@ -29,9 +28,9 @@ var disableCmd = &cobra.Command{
 	Short: "Disable a feed (skip during fetch)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := strconv.ParseInt(args[0], 10, 64)
+		id, err := parseIDArg(args[0])
 		if err != nil {
-			return fmt.Errorf("invalid feed ID: %w", err)
+			return err
 		}
 		if err := svc.DisableFeed(cmd.Context(), id); err != nil {
 			return err

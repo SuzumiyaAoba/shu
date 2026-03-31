@@ -78,7 +78,9 @@ func (s *Service) FetchFeed(ctx context.Context, feedID int64) ([]*Entry, error)
 	body, headers, err := s.fetchBodyConditional(ctx, feed.URL, feed.ETag, feed.LastModified)
 	if err != nil {
 		// Record the error for health monitoring.
-		_ = s.store.RecordFeedError(ctx, feedID, err.Error())
+		if recErr := s.store.RecordFeedError(ctx, feedID, err.Error()); recErr != nil {
+			s.logger.Warn("failed to record feed error", "id", feedID, "error", recErr)
+		}
 		return nil, fmt.Errorf("fetch feed %s: %w", feed.URL, err)
 	}
 
@@ -92,10 +94,10 @@ func (s *Service) FetchFeed(ctx context.Context, feedID int64) ([]*Entry, error)
 	}
 
 	// Store cache headers for next conditional GET.
-	if etag := headers.Get("ETag"); etag != "" {
-		_ = s.store.UpdateFeedCacheHeaders(ctx, feedID, etag, headers.Get("Last-Modified"))
-	} else if lm := headers.Get("Last-Modified"); lm != "" {
-		_ = s.store.UpdateFeedCacheHeaders(ctx, feedID, "", lm)
+	if etag := headers.Get("ETag"); etag != "" || headers.Get("Last-Modified") != "" {
+		if err := s.store.UpdateFeedCacheHeaders(ctx, feedID, headers.Get("ETag"), headers.Get("Last-Modified")); err != nil {
+			s.logger.Warn("failed to update cache headers", "id", feedID, "error", err)
+		}
 	}
 
 	// Universal parse.
@@ -135,7 +137,9 @@ func (s *Service) FetchFeed(ctx context.Context, feedID int64) ([]*Entry, error)
 	}
 
 	// Reset error count on successful fetch.
-	_ = s.store.ResetFeedError(ctx, feedID)
+	if err := s.store.ResetFeedError(ctx, feedID); err != nil {
+		s.logger.Warn("failed to reset feed error", "id", feedID, "error", err)
+	}
 
 	s.logger.Info("feed fetched", "id", feedID, "title", feed.Title, "new_entries", inserted)
 

@@ -13,84 +13,66 @@ import (
 	"time"
 )
 
-// Store defines the persistence contract required by [Service].
-// Implementations must be safe for sequential use from a single goroutine;
-// concurrent access is not required by the current design.
-type Store interface {
-	// AddFeed persists a new feed. On success the feed's ID and AddedAt
-	// fields are populated by the store.
+// FeedStore handles feed CRUD operations.
+type FeedStore interface {
 	AddFeed(ctx context.Context, feed *Feed) error
-	// GetFeed retrieves a single feed by its primary key.
-	// It returns an error if the feed does not exist.
 	GetFeed(ctx context.Context, id int64) (*Feed, error)
-	// ListFeeds returns all registered feeds ordered by ID.
 	ListFeeds(ctx context.Context) ([]*Feed, error)
-	// RemoveFeed deletes a feed and, via cascade, all of its entries.
 	RemoveFeed(ctx context.Context, id int64) error
-	// UpdateFeedFetchedAt sets the feed's FetchedAt timestamp to the current
-	// time, indicating a successful fetch cycle.
-	UpdateFeedFetchedAt(ctx context.Context, id int64) error
-	// AddEntries inserts entries that do not already exist (deduplicated by
-	// the feed_id + GUID pair). It returns the number of newly inserted rows.
-	AddEntries(ctx context.Context, entries []*Entry) (int, error)
-	// GetEntry retrieves a single entry by its primary key.
-	GetEntry(ctx context.Context, id int64) (*Entry, error)
-	// ListEntries returns entries matching the given filter, ordered by
-	// fetched_at descending (newest first).
-	ListEntries(ctx context.Context, filter EntryFilter) ([]*Entry, error)
-
-	// UpdateFeed updates mutable feed fields (title, URL).
 	UpdateFeed(ctx context.Context, id int64, update FeedUpdate) error
-	// UpdateFeedCacheHeaders stores the HTTP ETag and Last-Modified values
-	// received during a fetch, enabling conditional GET on the next request.
+	UpdateFeedFetchedAt(ctx context.Context, id int64) error
 	UpdateFeedCacheHeaders(ctx context.Context, id int64, etag, lastModified string) error
+}
 
-	// MarkEntryRead sets the read_at timestamp on the given entry.
-	MarkEntryRead(ctx context.Context, id int64) error
-	// MarkEntryUnread clears the read_at timestamp on the given entry.
-	MarkEntryUnread(ctx context.Context, id int64) error
-
-	// AddTag creates a tag and associates it with a feed. If the tag name
-	// already exists, it reuses the existing tag.
-	AddTag(ctx context.Context, feedID int64, tagName string) error
-	// RemoveTag removes a tag association from a feed.
-	RemoveTag(ctx context.Context, feedID int64, tagName string) error
-	// ListTags returns all tags associated with a given feed.
-	ListTags(ctx context.Context, feedID int64) ([]Tag, error)
-	// ListAllTags returns every tag in the system.
-	ListAllTags(ctx context.Context) ([]Tag, error)
-	// ListFeedsByTag returns all feeds associated with the given tag name.
-	ListFeedsByTag(ctx context.Context, tagName string) ([]*Feed, error)
-
-	// SearchEntries performs full-text search across entry titles, summaries,
-	// and content. Returns matching entries ordered by relevance.
-	SearchEntries(ctx context.Context, query string, limit int) ([]*Entry, error)
-
-	// StarEntry sets the starred_at timestamp on the given entry.
-	StarEntry(ctx context.Context, id int64) error
-	// UnstarEntry clears the starred_at timestamp on the given entry.
-	UnstarEntry(ctx context.Context, id int64) error
-
-	// RecordFeedError increments the error count and stores the error message.
-	// If the error count reaches the threshold, the feed is automatically disabled.
+// FeedHealthStore tracks feed fetch errors and disabled state.
+type FeedHealthStore interface {
 	RecordFeedError(ctx context.Context, id int64, errMsg string) error
-	// ResetFeedError clears the error count and last error after a successful fetch.
 	ResetFeedError(ctx context.Context, id int64) error
-	// SetFeedDisabled enables or disables a feed.
 	SetFeedDisabled(ctx context.Context, id int64, disabled bool) error
+}
 
-	// FeedStats returns aggregate statistics for all feeds.
-	FeedStats(ctx context.Context) ([]FeedStats, error)
-
-	// CleanupEntries deletes entries older than the given time, excluding starred.
-	// Returns the number of deleted entries.
-	CleanupEntries(ctx context.Context, olderThan time.Time) (int, error)
-
-	// FindDuplicateEntries returns entries from other feeds that share the same
-	// link URL as the given entry.
+// EntryStore handles entry persistence and queries.
+type EntryStore interface {
+	AddEntries(ctx context.Context, entries []*Entry) (int, error)
+	GetEntry(ctx context.Context, id int64) (*Entry, error)
+	ListEntries(ctx context.Context, filter EntryFilter) ([]*Entry, error)
+	SearchEntries(ctx context.Context, query string, limit int) ([]*Entry, error)
 	FindDuplicateEntries(ctx context.Context, entryID int64) ([]*Entry, error)
+}
 
-	// Close releases any resources held by the store (e.g. database connections).
+// EntryStateStore manages read/star state on entries.
+type EntryStateStore interface {
+	MarkEntryRead(ctx context.Context, id int64) error
+	MarkEntryUnread(ctx context.Context, id int64) error
+	StarEntry(ctx context.Context, id int64) error
+	UnstarEntry(ctx context.Context, id int64) error
+}
+
+// TagStore handles tag CRUD and feed-tag associations.
+type TagStore interface {
+	AddTag(ctx context.Context, feedID int64, tagName string) error
+	RemoveTag(ctx context.Context, feedID int64, tagName string) error
+	ListTags(ctx context.Context, feedID int64) ([]Tag, error)
+	ListAllTags(ctx context.Context) ([]Tag, error)
+	ListFeedsByTag(ctx context.Context, tagName string) ([]*Feed, error)
+}
+
+// MaintenanceStore provides housekeeping operations.
+type MaintenanceStore interface {
+	FeedStats(ctx context.Context) ([]FeedStats, error)
+	CleanupEntries(ctx context.Context, olderThan time.Time) (int, error)
+}
+
+// Store is the full persistence contract required by [Service].
+// It composes all role-specific interfaces. Implementations must be safe for
+// sequential use from a single goroutine.
+type Store interface {
+	FeedStore
+	FeedHealthStore
+	EntryStore
+	EntryStateStore
+	TagStore
+	MaintenanceStore
 	Close() error
 }
 

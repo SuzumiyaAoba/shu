@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/SuzumiyaAoba/shu/core"
 	"github.com/spf13/cobra"
@@ -18,9 +17,9 @@ var updateCmd = &cobra.Command{
 	Short: "Update a feed's title or URL",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := strconv.ParseInt(args[0], 10, 64)
+		id, err := parseIDArg(args[0])
 		if err != nil {
-			return fmt.Errorf("invalid feed ID: %w", err)
+			return err
 		}
 
 		update := core.FeedUpdate{}
