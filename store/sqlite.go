@@ -24,7 +24,7 @@ var migrationsFS embed.FS
 const feedColumns = `id, url, title, site_url, added_at, fetched_at, description, language, image_url, feed_type`
 
 // entryColumns is the SELECT column list shared by ListEntries.
-const entryColumns = `id, feed_id, guid, title, link, summary, published_at, fetched_at, content, author, image_url, categories, updated_at, enclosures`
+const entryColumns = `id, feed_id, guid, title, link, summary, published_at, fetched_at, content, author, image_url, categories, updated_at, enclosures, authors, links, contributors, rights, source`
 
 // SQLiteStore implements [Store] using a SQLite database via the pure-Go
 // modernc.org/sqlite driver (no CGo required).
@@ -216,7 +216,7 @@ func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (in
 	defer tx.Rollback()
 
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT OR IGNORE INTO entries (feed_id, guid, title, link, summary, published_at, content, author, image_url, categories, updated_at, enclosures) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT OR IGNORE INTO entries (feed_id, guid, title, link, summary, published_at, content, author, image_url, categories, updated_at, enclosures, authors, links, contributors, rights, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("prepare statement: %w", err)
@@ -238,6 +238,7 @@ func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (in
 		result, err := stmt.ExecContext(ctx,
 			e.FeedID, e.GUID, e.Title, e.Link, e.Summary, pubAt,
 			e.Content, e.Author, e.ImageURL, e.Categories, updAt, e.Enclosures,
+			e.Authors, e.Links, e.Contributors, e.Rights, e.Source,
 		)
 		if err != nil {
 			return 0, fmt.Errorf("insert entry: %w", err)
@@ -349,6 +350,7 @@ func scanEntry(s scanner) (*core.Entry, error) {
 		&e.ID, &e.FeedID, &e.GUID, &e.Title, &e.Link, &e.Summary,
 		&publishedAt, &fetchedAt,
 		&e.Content, &e.Author, &e.ImageURL, &e.Categories, &updatedAt, &e.Enclosures,
+		&e.Authors, &e.Links, &e.Contributors, &e.Rights, &e.Source,
 	); err != nil {
 		return nil, fmt.Errorf("scan entry: %w", err)
 	}

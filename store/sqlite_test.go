@@ -152,7 +152,7 @@ func TestRemoveFeedCascadesEntries(t *testing.T) {
 	_ = s.AddFeed(ctx, feed)
 
 	entries := []*core.Entry{
-		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: "[]", Enclosures: "[]"},
+		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
 	}
 	_, _ = s.AddEntries(ctx, entries)
 
@@ -195,8 +195,8 @@ func TestAddEntries(t *testing.T) {
 
 	now := time.Now()
 	entries := []*core.Entry{
-		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1", Link: "https://example.com/1", PublishedAt: &now, Categories: "[]", Enclosures: "[]"},
-		{FeedID: feed.ID, GUID: "guid-2", Title: "Entry 2", Link: "https://example.com/2", Categories: "[]", Enclosures: "[]"},
+		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1", Link: "https://example.com/1", PublishedAt: &now, Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "guid-2", Title: "Entry 2", Link: "https://example.com/2", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
 	}
 
 	inserted, err := s.AddEntries(ctx, entries)
@@ -230,7 +230,12 @@ func TestAddEntriesExpandedFields(t *testing.T) {
 			Categories: `["go","rss","tech"]`,
 			PublishedAt: &now,
 			UpdatedAt:  &updated,
-			Enclosures: `[{"url":"https://example.com/ep1.mp3","length":"12345","type":"audio/mpeg"}]`,
+			Enclosures:   `[{"url":"https://example.com/ep1.mp3","length":"12345","type":"audio/mpeg"}]`,
+			Authors:      `[{"name":"John Doe","email":"john@example.com","uri":"https://john.example.com"}]`,
+			Links:        `[{"href":"https://example.com/full","rel":"alternate","type":"text/html","hreflang":"","title":"","length":""}]`,
+			Contributors: `[{"name":"Jane","email":"jane@example.com","uri":""}]`,
+			Rights:       "Copyright 2026",
+			Source:        `{"title":"Original","id":"urn:uuid:source","updated":"2026-01-01T00:00:00Z"}`,
 		},
 	}
 
@@ -271,6 +276,21 @@ func TestAddEntriesExpandedFields(t *testing.T) {
 	if e.Enclosures != `[{"url":"https://example.com/ep1.mp3","length":"12345","type":"audio/mpeg"}]` {
 		t.Errorf("Enclosures = %q, want JSON with podcast enclosure", e.Enclosures)
 	}
+	if e.Authors != `[{"name":"John Doe","email":"john@example.com","uri":"https://john.example.com"}]` {
+		t.Errorf("Authors = %q", e.Authors)
+	}
+	if e.Links != `[{"href":"https://example.com/full","rel":"alternate","type":"text/html","hreflang":"","title":"","length":""}]` {
+		t.Errorf("Links = %q", e.Links)
+	}
+	if e.Contributors != `[{"name":"Jane","email":"jane@example.com","uri":""}]` {
+		t.Errorf("Contributors = %q", e.Contributors)
+	}
+	if e.Rights != "Copyright 2026" {
+		t.Errorf("Rights = %q, want %q", e.Rights, "Copyright 2026")
+	}
+	if e.Source != `{"title":"Original","id":"urn:uuid:source","updated":"2026-01-01T00:00:00Z"}` {
+		t.Errorf("Source = %q", e.Source)
+	}
 }
 
 func TestAddEntriesDeduplication(t *testing.T) {
@@ -281,14 +301,14 @@ func TestAddEntriesDeduplication(t *testing.T) {
 	_ = s.AddFeed(ctx, feed)
 
 	entries := []*core.Entry{
-		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1", Categories: "[]", Enclosures: "[]"},
+		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
 	}
 	_, _ = s.AddEntries(ctx, entries)
 
 	// Same GUID should be skipped
 	dupes := []*core.Entry{
-		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1 Updated", Categories: "[]", Enclosures: "[]"},
-		{FeedID: feed.ID, GUID: "guid-2", Title: "Entry 2", Categories: "[]", Enclosures: "[]"},
+		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1 Updated", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "guid-2", Title: "Entry 2", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
 	}
 	inserted, err := s.AddEntries(ctx, dupes)
 	if err != nil {
@@ -320,9 +340,9 @@ func TestListEntries(t *testing.T) {
 	_ = s.AddFeed(ctx, feed)
 
 	entries := []*core.Entry{
-		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: "[]", Enclosures: "[]"},
-		{FeedID: feed.ID, GUID: "2", Title: "Entry 2", Categories: "[]", Enclosures: "[]"},
-		{FeedID: feed.ID, GUID: "3", Title: "Entry 3", Categories: "[]", Enclosures: "[]"},
+		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "2", Title: "Entry 2", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "3", Title: "Entry 3", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
 	}
 	_, _ = s.AddEntries(ctx, entries)
 
@@ -345,9 +365,9 @@ func TestListEntriesFilterByFeed(t *testing.T) {
 	_ = s.AddFeed(ctx, feed2)
 
 	_, _ = s.AddEntries(ctx, []*core.Entry{
-		{FeedID: feed1.ID, GUID: "a1", Title: "A1", Categories: "[]", Enclosures: "[]"},
-		{FeedID: feed1.ID, GUID: "a2", Title: "A2", Categories: "[]", Enclosures: "[]"},
-		{FeedID: feed2.ID, GUID: "b1", Title: "B1", Categories: "[]", Enclosures: "[]"},
+		{FeedID: feed1.ID, GUID: "a1", Title: "A1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed1.ID, GUID: "a2", Title: "A2", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed2.ID, GUID: "b1", Title: "B1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
 	})
 
 	feedID := feed1.ID

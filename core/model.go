@@ -71,8 +71,10 @@ type Entry struct {
 	Author string
 	// ImageURL is the URL of the entry's featured image or thumbnail.
 	ImageURL string
-	// Categories is a JSON-encoded array of tag/category strings
-	// (e.g. `["go","rss"]`). Defaults to "[]" when no categories are present.
+	// Categories is a JSON-encoded array of category objects.
+	// Each element has the shape {"term":"...","scheme":"...","label":"..."}.
+	// For RSS feeds, term is the category string and scheme/label are empty.
+	// Defaults to "[]" when no categories are present.
 	Categories string
 	// UpdatedAt is when the entry was last modified by the source feed.
 	// It is nil if the source does not provide an update timestamp.
@@ -81,6 +83,27 @@ type Entry struct {
 	// Each element has the shape {"url":"...","length":"...","type":"..."}.
 	// Defaults to "[]" when no enclosures are present.
 	Enclosures string
+	// Authors is a JSON-encoded array of person objects with full metadata.
+	// Each element has the shape {"name":"...","email":"...","uri":"..."}.
+	// The Author field (above) is kept for convenience as the first author's name.
+	// Defaults to "[]" when no authors are specified.
+	Authors string
+	// Links is a JSON-encoded array of link objects with full Atom metadata.
+	// Each element has the shape {"href":"...","rel":"...","type":"...","hreflang":"...","title":"...","length":"..."}.
+	// The Link field (above) is kept for convenience as the primary permalink.
+	// Defaults to "[]".
+	Links string
+	// Contributors is a JSON-encoded array of person objects (Atom only).
+	// Each element has the shape {"name":"...","email":"...","uri":"..."}.
+	// Defaults to "[]". Only populated for Atom feeds.
+	Contributors string
+	// Rights is the copyright or license text from the Atom <rights> element.
+	// Empty for RSS feeds or when not specified.
+	Rights string
+	// Source is a JSON-encoded object representing the Atom <source> element,
+	// with the shape {"title":"...","id":"...","updated":"..."}.
+	// Empty string when not present. Only populated for Atom feeds.
+	Source string
 }
 
 // EntryFilter specifies criteria for querying stored entries.

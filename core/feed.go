@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
@@ -11,7 +12,7 @@ import (
 //
 // The method performs the following steps:
 //  1. Fetches and parses the feed document at the given URL to validate it and
-//     extract metadata (title, site URL).
+//     extract metadata (title, site URL, description, language, image, type).
 //  2. If titleOverride is non-empty, it is used instead of the title found in
 //     the feed document.
 //  3. Persists the feed record via the store. On success the returned [Feed]
@@ -20,12 +21,15 @@ import (
 // An error is returned if the URL is unreachable, the document is not a valid
 // feed, or the store rejects the insertion (e.g. duplicate URL).
 func (s *Service) AddFeed(ctx context.Context, url string, titleOverride string) (*Feed, error) {
-	fp := gofeed.NewParser()
-	fp.Client = s.client
-
-	parsed, err := fp.ParseURLWithContext(url, ctx)
+	body, err := s.fetchBody(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("fetch feed %s: %w", url, err)
+	}
+
+	fp := gofeed.NewParser()
+	parsed, err := fp.Parse(bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("parse feed %s: %w", url, err)
 	}
 
 	title := parsed.Title
