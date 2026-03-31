@@ -40,6 +40,30 @@ type Store interface {
 	// fetched_at descending (newest first).
 	ListEntries(ctx context.Context, filter core.EntryFilter) ([]*core.Entry, error)
 
+	// UpdateFeed updates mutable feed fields.
+	UpdateFeed(ctx context.Context, id int64, update core.FeedUpdate) error
+	// UpdateFeedCacheHeaders stores HTTP cache headers for conditional GET.
+	UpdateFeedCacheHeaders(ctx context.Context, id int64, etag, lastModified string) error
+
+	// MarkEntryRead sets the read_at timestamp on the given entry.
+	MarkEntryRead(ctx context.Context, id int64) error
+	// MarkEntryUnread clears the read_at timestamp on the given entry.
+	MarkEntryUnread(ctx context.Context, id int64) error
+
+	// AddTag creates a tag and associates it with a feed.
+	AddTag(ctx context.Context, feedID int64, tagName string) error
+	// RemoveTag removes a tag association from a feed.
+	RemoveTag(ctx context.Context, feedID int64, tagName string) error
+	// ListTags returns all tags for a feed.
+	ListTags(ctx context.Context, feedID int64) ([]core.Tag, error)
+	// ListAllTags returns every tag.
+	ListAllTags(ctx context.Context) ([]core.Tag, error)
+	// ListFeedsByTag returns feeds with the given tag.
+	ListFeedsByTag(ctx context.Context, tagName string) ([]*core.Feed, error)
+
+	// SearchEntries performs full-text search on entries.
+	SearchEntries(ctx context.Context, query string, limit int) ([]*core.Entry, error)
+
 	// Close releases database connections and other resources.
 	Close() error
 }

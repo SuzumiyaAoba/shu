@@ -1,0 +1,69 @@
+package core_test
+
+import (
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestDiscoverFeeds(t *testing.T) {
+	htmlPage := `<!DOCTYPE html>
+<html>
+<head>
+  <title>My Blog</title>
+  <link rel="alternate" type="application/rss+xml" href="/feed.xml" title="RSS">
+  <link rel="alternate" type="application/atom+xml" href="https://example.com/atom.xml" title="Atom">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>Hello</body>
+</html>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		io.WriteString(w, htmlPage)
+	}))
+	defer ts.Close()
+
+	svc := newTestService(t, nil)
+	svc.SetHTTPClient(ts.Client())
+	ctx := context.Background()
+
+	feeds, err := svc.DiscoverFeeds(ctx, ts.URL+"/")
+	if err != nil {
+		t.Fatalf("DiscoverFeeds failed: %v", err)
+	}
+	if len(feeds) != 2 {
+		t.Fatalf("got %d feeds, want 2", len(feeds))
+	}
+
+	// First feed should be relative, resolved to test server URL.
+	if feeds[0] != ts.URL+"/feed.xml" {
+		t.Errorf("feeds[0] = %q, expected relative URL resolved", feeds[0])
+	}
+	// Second feed should be absolute.
+	if feeds[1] != "https://example.com/atom.xml" {
+		t.Errorf("feeds[1] = %q, want %q", feeds[1], "https://example.com/atom.xml")
+	}
+}
+
+func TestDiscoverFeedsNone(t *testing.T) {
+	htmlPage := `<!DOCTYPE html><html><head><title>No feeds</title></head><body>Hello</body></html>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, htmlPage)
+	}))
+	defer ts.Close()
+
+	svc := newTestService(t, nil)
+	svc.SetHTTPClient(ts.Client())
+
+	feeds, err := svc.DiscoverFeeds(context.Background(), ts.URL)
+	if err != nil {
+		t.Fatalf("DiscoverFeeds failed: %v", err)
+	}
+	if len(feeds) != 0 {
+		t.Errorf("got %d feeds, want 0", len(feeds))
+	}
+}

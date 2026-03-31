@@ -36,6 +36,34 @@ type Store interface {
 	// ListEntries returns entries matching the given filter, ordered by
 	// fetched_at descending (newest first).
 	ListEntries(ctx context.Context, filter EntryFilter) ([]*Entry, error)
+
+	// UpdateFeed updates mutable feed fields (title, URL).
+	UpdateFeed(ctx context.Context, id int64, update FeedUpdate) error
+	// UpdateFeedCacheHeaders stores the HTTP ETag and Last-Modified values
+	// received during a fetch, enabling conditional GET on the next request.
+	UpdateFeedCacheHeaders(ctx context.Context, id int64, etag, lastModified string) error
+
+	// MarkEntryRead sets the read_at timestamp on the given entry.
+	MarkEntryRead(ctx context.Context, id int64) error
+	// MarkEntryUnread clears the read_at timestamp on the given entry.
+	MarkEntryUnread(ctx context.Context, id int64) error
+
+	// AddTag creates a tag and associates it with a feed. If the tag name
+	// already exists, it reuses the existing tag.
+	AddTag(ctx context.Context, feedID int64, tagName string) error
+	// RemoveTag removes a tag association from a feed.
+	RemoveTag(ctx context.Context, feedID int64, tagName string) error
+	// ListTags returns all tags associated with a given feed.
+	ListTags(ctx context.Context, feedID int64) ([]Tag, error)
+	// ListAllTags returns every tag in the system.
+	ListAllTags(ctx context.Context) ([]Tag, error)
+	// ListFeedsByTag returns all feeds associated with the given tag name.
+	ListFeedsByTag(ctx context.Context, tagName string) ([]*Feed, error)
+
+	// SearchEntries performs full-text search across entry titles, summaries,
+	// and content. Returns matching entries ordered by relevance.
+	SearchEntries(ctx context.Context, query string, limit int) ([]*Entry, error)
+
 	// Close releases any resources held by the store (e.g. database connections).
 	Close() error
 }

@@ -1,0 +1,31 @@
+package cmd
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+)
+
+var discoverCmd = &cobra.Command{
+	Use:   "discover <url>",
+	Short: "Discover feed URLs from a web page",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		feeds, err := svc.DiscoverFeeds(cmd.Context(), args[0])
+		if err != nil {
+			return err
+		}
+		if len(feeds) == 0 {
+			fmt.Fprintln(cmd.OutOrStdout(), "No feeds found.")
+			return nil
+		}
+		for _, u := range feeds {
+			fmt.Fprintln(cmd.OutOrStdout(), u)
+		}
+		return nil
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(discoverCmd)
+}

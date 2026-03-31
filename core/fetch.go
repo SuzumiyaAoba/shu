@@ -67,10 +67,26 @@ func (s *Service) FetchFeed(ctx context.Context, feedID int64) ([]*Entry, error)
 		return nil, fmt.Errorf("get feed %d: %w", feedID, err)
 	}
 
-	// Fetch the feed body manually so we can parse it twice if needed.
-	body, err := s.fetchBody(ctx, feed.URL)
+	// Fetch the feed body with conditional GET support.
+	body, headers, err := s.fetchBodyConditional(ctx, feed.URL, feed.ETag, feed.LastModified)
 	if err != nil {
 		return nil, fmt.Errorf("fetch feed %s: %w", feed.URL, err)
+	}
+
+	// 304 Not Modified — nothing new.
+	if body == nil {
+		if err := s.store.UpdateFeedFetchedAt(ctx, feedID); err != nil {
+			return nil, fmt.Errorf("update fetched_at: %w", err)
+		}
+		s.logger.Info("feed not modified", "id", feedID, "title", feed.Title)
+		return nil, nil
+	}
+
+	// Store cache headers for next conditional GET.
+	if etag := headers.Get("ETag"); etag != "" {
+		_ = s.store.UpdateFeedCacheHeaders(ctx, feedID, etag, headers.Get("Last-Modified"))
+	} else if lm := headers.Get("Last-Modified"); lm != "" {
+		_ = s.store.UpdateFeedCacheHeaders(ctx, feedID, "", lm)
 	}
 
 	// Universal parse.
@@ -123,28 +139,45 @@ func (s *Service) FetchFeed(ctx context.Context, feedID int64) ([]*Entry, error)
 }
 
 // fetchBody downloads the feed document at the given URL and returns the raw
-// response body. This allows the body to be parsed multiple times (e.g. once
-// with the universal parser and once with the Atom-specific parser).
+// response body. This is used by AddFeed where no conditional GET is needed.
 func (s *Service) fetchBody(ctx context.Context, url string) ([]byte, error) {
+	body, _, err := s.fetchBodyConditional(ctx, url, "", "")
+	return body, err
+}
+
+// fetchBodyConditional downloads the feed document with optional conditional
+// GET headers (If-None-Match, If-Modified-Since). Returns nil body on 304.
+func (s *Service) fetchBodyConditional(ctx context.Context, url, etag, lastModified string) ([]byte, http.Header, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, nil, fmt.Errorf("create request: %w", err)
 	}
+	if etag != "" {
+		req.Header.Set("If-None-Match", etag)
+	}
+	if lastModified != "" {
+		req.Header.Set("If-Modified-Since", lastModified)
+	}
+
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("http get: %w", err)
+		return nil, nil, fmt.Errorf("http get: %w", err)
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotModified {
+		return nil, resp.Header, nil
+	}
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("http status %d", resp.StatusCode)
+		return nil, nil, fmt.Errorf("http status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read body: %w", err)
+		return nil, nil, fmt.Errorf("read body: %w", err)
 	}
-	return body, nil
+	return body, resp.Header, nil
 }
 
 // parseAtomEntries parses the raw Atom XML and returns a map from entry ID to

@@ -35,6 +35,12 @@ type Feed struct {
 	// FeedType indicates the detected feed format as reported by gofeed:
 	// "rss", "atom", or "json".
 	FeedType string
+	// ETag is the HTTP ETag header value from the last successful fetch.
+	// Used for conditional GET requests to avoid re-downloading unchanged feeds.
+	ETag string
+	// LastModified is the HTTP Last-Modified header value from the last
+	// successful fetch. Used together with ETag for conditional GET requests.
+	LastModified string
 }
 
 // Entry represents a single article or item from an RSS/Atom feed.
@@ -104,6 +110,9 @@ type Entry struct {
 	// with the shape {"title":"...","id":"...","updated":"..."}.
 	// Empty string when not present. Only populated for Atom feeds.
 	Source string
+	// ReadAt records when the entry was marked as read by the user.
+	// It is nil if the entry has not been read yet.
+	ReadAt *time.Time
 }
 
 // EntryFilter specifies criteria for querying stored entries.
@@ -116,4 +125,23 @@ type EntryFilter struct {
 	// Offset skips the first N entries in the result set, enabling pagination
 	// when combined with Limit.
 	Offset int
+	// UnreadOnly, when true, restricts results to entries that have not been
+	// marked as read (read_at IS NULL).
+	UnreadOnly bool
+	// Tag, when non-empty, restricts results to entries from feeds that have
+	// the specified tag.
+	Tag string
+}
+
+// FeedUpdate holds the mutable fields for updating a feed.
+// Nil pointer fields are left unchanged.
+type FeedUpdate struct {
+	Title *string
+	URL   *string
+}
+
+// Tag represents a user-defined label for organizing feeds.
+type Tag struct {
+	ID   int64
+	Name string
 }

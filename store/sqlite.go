@@ -21,10 +21,10 @@ import (
 var migrationsFS embed.FS
 
 // feedColumns is the SELECT column list shared by GetFeed and ListFeeds.
-const feedColumns = `id, url, title, site_url, added_at, fetched_at, description, language, image_url, feed_type`
+const feedColumns = `id, url, title, site_url, added_at, fetched_at, description, language, image_url, feed_type, etag, last_modified`
 
 // entryColumns is the SELECT column list shared by ListEntries.
-const entryColumns = `id, feed_id, guid, title, link, summary, published_at, fetched_at, content, author, image_url, categories, updated_at, enclosures, authors, links, contributors, rights, source`
+const entryColumns = `id, feed_id, guid, title, link, summary, published_at, fetched_at, content, author, image_url, categories, updated_at, enclosures, authors, links, contributors, rights, source, read_at`
 
 // SQLiteStore implements [Store] using a SQLite database via the pure-Go
 // modernc.org/sqlite driver (no CGo required).
@@ -264,10 +264,27 @@ func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (in
 func (s *SQLiteStore) ListEntries(ctx context.Context, filter core.EntryFilter) ([]*core.Entry, error) {
 	query := `SELECT ` + entryColumns + ` FROM entries`
 	var args []any
+	var conditions []string
 
 	if filter.FeedID != nil {
-		query += ` WHERE feed_id = ?`
+		conditions = append(conditions, `feed_id = ?`)
 		args = append(args, *filter.FeedID)
+	}
+
+	if filter.UnreadOnly {
+		conditions = append(conditions, `read_at IS NULL`)
+	}
+
+	if filter.Tag != "" {
+		conditions = append(conditions, `feed_id IN (SELECT ft.feed_id FROM feed_tags ft JOIN tags t ON t.id = ft.tag_id WHERE t.name = ?)`)
+		args = append(args, filter.Tag)
+	}
+
+	if len(conditions) > 0 {
+		query += ` WHERE ` + conditions[0]
+		for _, c := range conditions[1:] {
+			query += ` AND ` + c
+		}
 	}
 
 	query += ` ORDER BY fetched_at DESC`
@@ -316,6 +333,7 @@ func scanFeed(s scanner) (*core.Feed, error) {
 	if err := s.Scan(
 		&f.ID, &f.URL, &f.Title, &f.SiteURL, &addedAt, &fetchedAt,
 		&f.Description, &f.Language, &f.ImageURL, &f.FeedType,
+		&f.ETag, &f.LastModified,
 	); err != nil {
 		return nil, fmt.Errorf("scan feed: %w", err)
 	}
@@ -345,12 +363,14 @@ func scanEntry(s scanner) (*core.Entry, error) {
 	var publishedAt *string
 	var fetchedAt string
 	var updatedAt *string
+	var readAt *string
 
 	if err := s.Scan(
 		&e.ID, &e.FeedID, &e.GUID, &e.Title, &e.Link, &e.Summary,
 		&publishedAt, &fetchedAt,
 		&e.Content, &e.Author, &e.ImageURL, &e.Categories, &updatedAt, &e.Enclosures,
 		&e.Authors, &e.Links, &e.Contributors, &e.Rights, &e.Source,
+		&readAt,
 	); err != nil {
 		return nil, fmt.Errorf("scan entry: %w", err)
 	}
@@ -377,5 +397,198 @@ func scanEntry(s scanner) (*core.Entry, error) {
 		e.UpdatedAt = &t
 	}
 
+	if readAt != nil {
+		t, err := time.Parse(time.RFC3339, *readAt)
+		if err != nil {
+			return nil, fmt.Errorf("parse read_at: %w", err)
+		}
+		e.ReadAt = &t
+	}
+
 	return &e, nil
+}
+
+// UpdateFeed updates mutable feed fields. Only non-nil fields in the update
+// struct are applied.
+func (s *SQLiteStore) UpdateFeed(ctx context.Context, id int64, update core.FeedUpdate) error {
+	var sets []string
+	var args []any
+
+	if update.Title != nil {
+		sets = append(sets, "title = ?")
+		args = append(args, *update.Title)
+	}
+	if update.URL != nil {
+		sets = append(sets, "url = ?")
+		args = append(args, *update.URL)
+	}
+
+	if len(sets) == 0 {
+		return nil
+	}
+
+	args = append(args, id)
+	query := "UPDATE feeds SET " + sets[0]
+	for _, s := range sets[1:] {
+		query += ", " + s
+	}
+	query += " WHERE id = ?"
+
+	_, err := s.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("update feed: %w", err)
+	}
+	return nil
+}
+
+// UpdateFeedCacheHeaders stores the HTTP ETag and Last-Modified headers
+// received during a fetch.
+func (s *SQLiteStore) UpdateFeedCacheHeaders(ctx context.Context, id int64, etag, lastModified string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE feeds SET etag = ?, last_modified = ? WHERE id = ?`,
+		etag, lastModified, id,
+	)
+	if err != nil {
+		return fmt.Errorf("update cache headers: %w", err)
+	}
+	return nil
+}
+
+// MarkEntryRead sets the read_at timestamp on the given entry.
+func (s *SQLiteStore) MarkEntryRead(ctx context.Context, id int64) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE entries SET read_at = ? WHERE id = ?`, now, id,
+	)
+	if err != nil {
+		return fmt.Errorf("mark entry read: %w", err)
+	}
+	return nil
+}
+
+// MarkEntryUnread clears the read_at timestamp on the given entry.
+func (s *SQLiteStore) MarkEntryUnread(ctx context.Context, id int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE entries SET read_at = NULL WHERE id = ?`, id,
+	)
+	if err != nil {
+		return fmt.Errorf("mark entry unread: %w", err)
+	}
+	return nil
+}
+
+// AddTag creates a tag (if it doesn't exist) and associates it with a feed.
+func (s *SQLiteStore) AddTag(ctx context.Context, feedID int64, tagName string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO tags (name) VALUES (?)`, tagName)
+	if err != nil {
+		return fmt.Errorf("insert tag: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO feed_tags (feed_id, tag_id) SELECT ?, id FROM tags WHERE name = ?`,
+		feedID, tagName,
+	)
+	if err != nil {
+		return fmt.Errorf("associate tag: %w", err)
+	}
+	return nil
+}
+
+// RemoveTag removes a tag association from a feed.
+func (s *SQLiteStore) RemoveTag(ctx context.Context, feedID int64, tagName string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM feed_tags WHERE feed_id = ? AND tag_id = (SELECT id FROM tags WHERE name = ?)`,
+		feedID, tagName,
+	)
+	if err != nil {
+		return fmt.Errorf("remove tag: %w", err)
+	}
+	return nil
+}
+
+// ListTags returns all tags associated with a given feed.
+func (s *SQLiteStore) ListTags(ctx context.Context, feedID int64) ([]core.Tag, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT t.id, t.name FROM tags t JOIN feed_tags ft ON ft.tag_id = t.id WHERE ft.feed_id = ? ORDER BY t.name`,
+		feedID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list tags: %w", err)
+	}
+	defer rows.Close()
+
+	var tags []core.Tag
+	for rows.Next() {
+		var t core.Tag
+		if err := rows.Scan(&t.ID, &t.Name); err != nil {
+			return nil, fmt.Errorf("scan tag: %w", err)
+		}
+		tags = append(tags, t)
+	}
+	return tags, rows.Err()
+}
+
+// ListAllTags returns every tag in the system.
+func (s *SQLiteStore) ListAllTags(ctx context.Context) ([]core.Tag, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name FROM tags ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("list all tags: %w", err)
+	}
+	defer rows.Close()
+
+	var tags []core.Tag
+	for rows.Next() {
+		var t core.Tag
+		if err := rows.Scan(&t.ID, &t.Name); err != nil {
+			return nil, fmt.Errorf("scan tag: %w", err)
+		}
+		tags = append(tags, t)
+	}
+	return tags, rows.Err()
+}
+
+// ListFeedsByTag returns all feeds associated with the given tag name.
+func (s *SQLiteStore) ListFeedsByTag(ctx context.Context, tagName string) ([]*core.Feed, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+feedColumns+` FROM feeds WHERE id IN (SELECT ft.feed_id FROM feed_tags ft JOIN tags t ON t.id = ft.tag_id WHERE t.name = ?) ORDER BY id`,
+		tagName,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list feeds by tag: %w", err)
+	}
+	defer rows.Close()
+
+	var feeds []*core.Feed
+	for rows.Next() {
+		f, err := scanFeed(rows)
+		if err != nil {
+			return nil, err
+		}
+		feeds = append(feeds, f)
+	}
+	return feeds, rows.Err()
+}
+
+// SearchEntries performs full-text search using the FTS5 index.
+func (s *SQLiteStore) SearchEntries(ctx context.Context, query string, limit int) ([]*core.Entry, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+entryColumns+` FROM entries WHERE id IN (SELECT rowid FROM entries_fts WHERE entries_fts MATCH ?) ORDER BY fetched_at DESC LIMIT ?`,
+		query, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("search entries: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []*core.Entry
+	for rows.Next() {
+		e, err := scanEntry(rows)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
 }

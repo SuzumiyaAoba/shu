@@ -379,3 +379,207 @@ func TestListEntriesFilterByFeed(t *testing.T) {
 		t.Errorf("got %d entries, want 2", len(result))
 	}
 }
+
+func TestUpdateFeed(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Old Title"}
+	_ = s.AddFeed(ctx, feed)
+
+	newTitle := "New Title"
+	err := s.UpdateFeed(ctx, feed.ID, core.FeedUpdate{Title: &newTitle})
+	if err != nil {
+		t.Fatalf("UpdateFeed failed: %v", err)
+	}
+
+	got, _ := s.GetFeed(ctx, feed.ID)
+	if got.Title != "New Title" {
+		t.Errorf("Title = %q, want %q", got.Title, "New Title")
+	}
+	if got.URL != "https://example.com/feed.xml" {
+		t.Errorf("URL should be unchanged: %q", got.URL)
+	}
+}
+
+func TestUpdateFeedCacheHeaders(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	_ = s.AddFeed(ctx, feed)
+
+	err := s.UpdateFeedCacheHeaders(ctx, feed.ID, `"abc123"`, "Mon, 01 Jan 2026 00:00:00 GMT")
+	if err != nil {
+		t.Fatalf("UpdateFeedCacheHeaders failed: %v", err)
+	}
+
+	got, _ := s.GetFeed(ctx, feed.ID)
+	if got.ETag != `"abc123"` {
+		t.Errorf("ETag = %q, want %q", got.ETag, `"abc123"`)
+	}
+	if got.LastModified != "Mon, 01 Jan 2026 00:00:00 GMT" {
+		t.Errorf("LastModified = %q", got.LastModified)
+	}
+}
+
+func TestMarkEntryReadUnread(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	_ = s.AddFeed(ctx, feed)
+
+	_, _ = s.AddEntries(ctx, []*core.Entry{
+		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+	})
+
+	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 1})
+	entryID := entries[0].ID
+
+	// Mark as read.
+	if err := s.MarkEntryRead(ctx, entryID); err != nil {
+		t.Fatalf("MarkEntryRead failed: %v", err)
+	}
+
+	entries, _ = s.ListEntries(ctx, core.EntryFilter{Limit: 1})
+	if entries[0].ReadAt == nil {
+		t.Error("expected ReadAt to be set")
+	}
+
+	// Unread filter should exclude it.
+	unread, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 10, UnreadOnly: true})
+	if len(unread) != 0 {
+		t.Errorf("expected 0 unread entries, got %d", len(unread))
+	}
+
+	// Mark as unread.
+	if err := s.MarkEntryUnread(ctx, entryID); err != nil {
+		t.Fatalf("MarkEntryUnread failed: %v", err)
+	}
+
+	unread, _ = s.ListEntries(ctx, core.EntryFilter{Limit: 10, UnreadOnly: true})
+	if len(unread) != 1 {
+		t.Errorf("expected 1 unread entry, got %d", len(unread))
+	}
+}
+
+func TestTags(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed1 := &core.Feed{URL: "https://a.com/feed", Title: "A"}
+	feed2 := &core.Feed{URL: "https://b.com/feed", Title: "B"}
+	_ = s.AddFeed(ctx, feed1)
+	_ = s.AddFeed(ctx, feed2)
+
+	// Add tags.
+	if err := s.AddTag(ctx, feed1.ID, "tech"); err != nil {
+		t.Fatalf("AddTag failed: %v", err)
+	}
+	if err := s.AddTag(ctx, feed1.ID, "go"); err != nil {
+		t.Fatalf("AddTag failed: %v", err)
+	}
+	if err := s.AddTag(ctx, feed2.ID, "tech"); err != nil {
+		t.Fatalf("AddTag failed: %v", err)
+	}
+
+	// List tags for feed1.
+	tags, err := s.ListTags(ctx, feed1.ID)
+	if err != nil {
+		t.Fatalf("ListTags failed: %v", err)
+	}
+	if len(tags) != 2 {
+		t.Errorf("got %d tags, want 2", len(tags))
+	}
+
+	// List all tags.
+	allTags, err := s.ListAllTags(ctx)
+	if err != nil {
+		t.Fatalf("ListAllTags failed: %v", err)
+	}
+	if len(allTags) != 2 {
+		t.Errorf("got %d tags, want 2", len(allTags))
+	}
+
+	// List feeds by tag.
+	techFeeds, err := s.ListFeedsByTag(ctx, "tech")
+	if err != nil {
+		t.Fatalf("ListFeedsByTag failed: %v", err)
+	}
+	if len(techFeeds) != 2 {
+		t.Errorf("got %d feeds with 'tech' tag, want 2", len(techFeeds))
+	}
+
+	// Remove tag.
+	if err := s.RemoveTag(ctx, feed1.ID, "go"); err != nil {
+		t.Fatalf("RemoveTag failed: %v", err)
+	}
+	tags, _ = s.ListTags(ctx, feed1.ID)
+	if len(tags) != 1 {
+		t.Errorf("got %d tags after remove, want 1", len(tags))
+	}
+
+	// Duplicate add should be idempotent.
+	if err := s.AddTag(ctx, feed1.ID, "tech"); err != nil {
+		t.Fatalf("duplicate AddTag failed: %v", err)
+	}
+}
+
+func TestListEntriesFilterByTag(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed1 := &core.Feed{URL: "https://a.com/feed", Title: "A"}
+	feed2 := &core.Feed{URL: "https://b.com/feed", Title: "B"}
+	_ = s.AddFeed(ctx, feed1)
+	_ = s.AddFeed(ctx, feed2)
+
+	_, _ = s.AddEntries(ctx, []*core.Entry{
+		{FeedID: feed1.ID, GUID: "a1", Title: "A1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed2.ID, GUID: "b1", Title: "B1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+	})
+
+	_ = s.AddTag(ctx, feed1.ID, "tagged")
+
+	result, err := s.ListEntries(ctx, core.EntryFilter{Tag: "tagged", Limit: 10})
+	if err != nil {
+		t.Fatalf("ListEntries with tag filter failed: %v", err)
+	}
+	if len(result) != 1 {
+		t.Errorf("got %d entries, want 1", len(result))
+	}
+	if len(result) > 0 && result[0].Title != "A1" {
+		t.Errorf("Title = %q, want %q", result[0].Title, "A1")
+	}
+}
+
+func TestSearchEntries(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	_ = s.AddFeed(ctx, feed)
+
+	_, _ = s.AddEntries(ctx, []*core.Entry{
+		{FeedID: feed.ID, GUID: "1", Title: "Golang Tutorial", Summary: "Learn Go", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "2", Title: "Python Guide", Summary: "Learn Python", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "3", Title: "Rust Basics", Content: "Rust is great for golang interop", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+	})
+
+	results, err := s.SearchEntries(ctx, "golang", 10)
+	if err != nil {
+		t.Fatalf("SearchEntries failed: %v", err)
+	}
+	if len(results) != 2 {
+		t.Errorf("got %d results, want 2 (title match + content match)", len(results))
+	}
+
+	results, err = s.SearchEntries(ctx, "python", 10)
+	if err != nil {
+		t.Fatalf("SearchEntries failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Errorf("got %d results, want 1", len(results))
+	}
+}
