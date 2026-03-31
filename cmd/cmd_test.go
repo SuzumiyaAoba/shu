@@ -74,25 +74,34 @@ func executeCommand(args ...string) (string, error) {
 func resetFlags() {
 	addTitle = ""
 	addJSON = false
+	addYAML = false
 	listJSON = false
+	listYAML = false
 	fetchFeedID = 0
 	fetchJSON = false
+	fetchYAML = false
 	entriesFeedID = 0
 	entriesLimit = 20
 	entriesJSON = false
+	entriesYAML = false
 	entriesUnread = false
 	entriesStarred = false
 	entriesTag = ""
 	entriesFormat = ""
 	statsJSON = false
+	statsYAML = false
 	cleanupOlderThan = 90 * 24 * time.Hour
 	updateTitle = ""
 	updateURL = ""
 	searchLimit = 20
 	searchJSON = false
+	searchYAML = false
 	discoverJSON = false
+	discoverYAML = false
 	duplicatesJSON = false
+	duplicatesYAML = false
 	tagsJSON = false
+	tagsYAML = false
 }
 
 const testRSSFeed = `<?xml version="1.0" encoding="UTF-8"?>

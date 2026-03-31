@@ -12,6 +12,8 @@ var (
 	fetchFeedID int64
 	// fetchJSON controls whether the output is formatted as JSON.
 	fetchJSON bool
+	// fetchYAML controls whether the output is formatted as YAML.
+	fetchYAML bool
 )
 
 // fetchCmd implements "shu fetch".
@@ -36,6 +38,9 @@ var fetchCmd = &cobra.Command{
 			if fetchJSON {
 				return writeJSON(cmd.OutOrStdout(), entries)
 			}
+			if fetchYAML {
+				return writeYAML(cmd.OutOrStdout(), entries)
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries from feed #%d\n", len(entries), fetchFeedID)
 			return nil
 		}
@@ -47,6 +52,9 @@ var fetchCmd = &cobra.Command{
 		if fetchJSON {
 			return writeJSON(cmd.OutOrStdout(), map[string]int{"count": count})
 		}
+		if fetchYAML {
+			return writeYAML(cmd.OutOrStdout(), map[string]int{"count": count})
+		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count)
 		return nil
 	},
@@ -55,5 +63,6 @@ var fetchCmd = &cobra.Command{
 func init() {
 	fetchCmd.Flags().Int64Var(&fetchFeedID, "feed-id", 0, "fetch a specific feed by ID")
 	fetchCmd.Flags().BoolVar(&fetchJSON, "json", false, "output as JSON")
+	fetchCmd.Flags().BoolVar(&fetchYAML, "yaml", false, "output as YAML")
 	rootCmd.AddCommand(fetchCmd)
 }

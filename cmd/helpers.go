@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+
+	"gopkg.in/yaml.v3"
 )
 
 // parseIDArg parses a command-line argument as an int64 ID.
@@ -20,6 +22,13 @@ func parseIDArg(arg string) (int64, error) {
 func writeJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
+	return enc.Encode(v)
+}
+
+// writeYAML encodes v as YAML to w.
+func writeYAML(w io.Writer, v any) error {
+	enc := yaml.NewEncoder(w)
+	enc.SetIndent(2)
 	return enc.Encode(v)
 }
 

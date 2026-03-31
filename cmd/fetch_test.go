@@ -71,3 +71,15 @@ func TestFetchCmdByFeedIDJSON(t *testing.T) {
 		t.Errorf("expected JSON array in output: %s", out)
 	}
 }
+
+func TestFetchCmdYAML(t *testing.T) {
+	setupTest(t)
+
+	out, err := executeCommand("fetch", "--yaml")
+	if err != nil {
+		t.Fatalf("fetch --yaml failed: %v", err)
+	}
+	if !strings.Contains(out, "count:") {
+		t.Errorf("expected YAML output with count: %s", out)
+	}
+}

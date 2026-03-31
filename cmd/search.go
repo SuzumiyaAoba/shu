@@ -11,6 +11,7 @@ import (
 var (
 	searchLimit int
 	searchJSON  bool
+	searchYAML  bool
 )
 
 var searchCmd = &cobra.Command{
@@ -28,6 +29,9 @@ var searchCmd = &cobra.Command{
 		if searchJSON {
 			return writeJSON(cmd.OutOrStdout(), entries)
 		}
+		if searchYAML {
+			return writeYAML(cmd.OutOrStdout(), entries)
+		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "ID\tFEED\tTITLE\tLINK")
@@ -41,5 +45,6 @@ var searchCmd = &cobra.Command{
 func init() {
 	searchCmd.Flags().IntVar(&searchLimit, "limit", 20, "max results")
 	searchCmd.Flags().BoolVar(&searchJSON, "json", false, "output as JSON")
+	searchCmd.Flags().BoolVar(&searchYAML, "yaml", false, "output as YAML")
 	rootCmd.AddCommand(searchCmd)
 }

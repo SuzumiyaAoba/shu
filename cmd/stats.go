@@ -7,7 +7,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var statsJSON bool
+var (
+	statsJSON bool
+	statsYAML bool
+)
 
 var statsCmd = &cobra.Command{
 	Use:   "stats",
@@ -20,6 +23,9 @@ var statsCmd = &cobra.Command{
 
 		if statsJSON {
 			return writeJSON(cmd.OutOrStdout(), stats)
+		}
+		if statsYAML {
+			return writeYAML(cmd.OutOrStdout(), stats)
 		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
@@ -39,5 +45,6 @@ var statsCmd = &cobra.Command{
 
 func init() {
 	statsCmd.Flags().BoolVar(&statsJSON, "json", false, "output as JSON")
+	statsCmd.Flags().BoolVar(&statsYAML, "yaml", false, "output as YAML")
 	rootCmd.AddCommand(statsCmd)
 }

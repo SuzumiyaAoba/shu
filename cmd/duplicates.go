@@ -7,7 +7,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var duplicatesJSON bool
+var (
+	duplicatesJSON bool
+	duplicatesYAML bool
+)
 
 var duplicatesCmd = &cobra.Command{
 	Use:   "duplicates <entry-id>",
@@ -27,6 +30,9 @@ var duplicatesCmd = &cobra.Command{
 		if duplicatesJSON {
 			return writeJSON(cmd.OutOrStdout(), dupes)
 		}
+		if duplicatesYAML {
+			return writeYAML(cmd.OutOrStdout(), dupes)
+		}
 
 		if len(dupes) == 0 {
 			fmt.Fprintln(cmd.OutOrStdout(), "No duplicates found.")
@@ -44,5 +50,6 @@ var duplicatesCmd = &cobra.Command{
 
 func init() {
 	duplicatesCmd.Flags().BoolVar(&duplicatesJSON, "json", false, "output as JSON")
+	duplicatesCmd.Flags().BoolVar(&duplicatesYAML, "yaml", false, "output as YAML")
 	rootCmd.AddCommand(duplicatesCmd)
 }

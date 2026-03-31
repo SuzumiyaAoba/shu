@@ -6,7 +6,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var discoverJSON bool
+var (
+	discoverJSON bool
+	discoverYAML bool
+)
 
 var discoverCmd = &cobra.Command{
 	Use:   "discover <url>",
@@ -20,6 +23,9 @@ var discoverCmd = &cobra.Command{
 
 		if discoverJSON {
 			return writeJSON(cmd.OutOrStdout(), feeds)
+		}
+		if discoverYAML {
+			return writeYAML(cmd.OutOrStdout(), feeds)
 		}
 
 		if len(feeds) == 0 {
@@ -35,5 +41,6 @@ var discoverCmd = &cobra.Command{
 
 func init() {
 	discoverCmd.Flags().BoolVar(&discoverJSON, "json", false, "output as JSON")
+	discoverCmd.Flags().BoolVar(&discoverYAML, "yaml", false, "output as YAML")
 	rootCmd.AddCommand(discoverCmd)
 }

@@ -12,6 +12,7 @@ var (
 	entriesFeedID  int64
 	entriesLimit   int
 	entriesJSON    bool
+	entriesYAML    bool
 	entriesUnread  bool
 	entriesStarred bool
 	entriesTag     string
@@ -39,6 +40,9 @@ var entriesCmd = &cobra.Command{
 
 		if entriesJSON {
 			return writeJSON(cmd.OutOrStdout(), entries)
+		}
+		if entriesYAML {
+			return writeYAML(cmd.OutOrStdout(), entries)
 		}
 
 		if entriesFormat == "markdown" {
@@ -90,6 +94,7 @@ func init() {
 	entriesCmd.Flags().Int64Var(&entriesFeedID, "feed-id", 0, "filter by feed ID")
 	entriesCmd.Flags().IntVar(&entriesLimit, "limit", 20, "max entries to show")
 	entriesCmd.Flags().BoolVar(&entriesJSON, "json", false, "output as JSON")
+	entriesCmd.Flags().BoolVar(&entriesYAML, "yaml", false, "output as YAML")
 	entriesCmd.Flags().BoolVar(&entriesUnread, "unread", false, "show only unread entries")
 	entriesCmd.Flags().BoolVar(&entriesStarred, "starred", false, "show only starred entries")
 	entriesCmd.Flags().StringVar(&entriesTag, "tag", "", "filter by feed tag")

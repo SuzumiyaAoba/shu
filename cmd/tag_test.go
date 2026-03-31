@@ -61,3 +61,18 @@ func TestTagsCmdJSON(t *testing.T) {
 		t.Errorf("expected JSON output with tag data: %s", out)
 	}
 }
+
+func TestTagsCmdYAML(t *testing.T) {
+	tsURL := setupTest(t)
+
+	_, _ = executeCommand("add", tsURL+"/feed.xml")
+	_, _ = executeCommand("tag", "1", "tech")
+
+	out, err := executeCommand("tags", "--yaml")
+	if err != nil {
+		t.Fatalf("tags --yaml failed: %v", err)
+	}
+	if !strings.Contains(out, "name:") || !strings.Contains(out, "tech") {
+		t.Errorf("expected YAML output with tag data: %s", out)
+	}
+}

@@ -52,3 +52,15 @@ func TestAddCmdJSON(t *testing.T) {
 		t.Errorf("expected JSON output with feed data: %s", out)
 	}
 }
+
+func TestAddCmdYAML(t *testing.T) {
+	tsURL := setupTest(t)
+
+	out, err := executeCommand("add", tsURL+"/feed.xml", "--yaml")
+	if err != nil {
+		t.Fatalf("add --yaml failed: %v", err)
+	}
+	if !strings.Contains(out, "title:") || !strings.Contains(out, "Test Blog") {
+		t.Errorf("expected YAML output with feed data: %s", out)
+	}
+}

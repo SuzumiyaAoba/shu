@@ -12,6 +12,8 @@ var (
 	addTitle string
 	// addJSON controls whether the output is formatted as JSON.
 	addJSON bool
+	// addYAML controls whether the output is formatted as YAML.
+	addYAML bool
 )
 
 // addCmd implements "shu add <url>".
@@ -36,6 +38,9 @@ var addCmd = &cobra.Command{
 		if addJSON {
 			return writeJSON(cmd.OutOrStdout(), feed)
 		}
+		if addYAML {
+			return writeYAML(cmd.OutOrStdout(), feed)
+		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Added feed #%d: %s (%s)\n", feed.ID, feed.Title, feed.URL)
 		return nil
 	},
@@ -44,5 +49,6 @@ var addCmd = &cobra.Command{
 func init() {
 	addCmd.Flags().StringVar(&addTitle, "title", "", "override feed title")
 	addCmd.Flags().BoolVar(&addJSON, "json", false, "output as JSON")
+	addCmd.Flags().BoolVar(&addYAML, "yaml", false, "output as YAML")
 	rootCmd.AddCommand(addCmd)
 }

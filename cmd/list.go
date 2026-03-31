@@ -7,9 +7,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// listJSON controls whether the output is formatted as JSON instead of a
-// human-readable table.
-var listJSON bool
+var (
+	// listJSON controls whether the output is formatted as JSON instead of a
+	// human-readable table.
+	listJSON bool
+	// listYAML controls whether the output is formatted as YAML.
+	listYAML bool
+)
 
 // listCmd implements "shu list".
 //
@@ -28,6 +32,9 @@ var listCmd = &cobra.Command{
 		if listJSON {
 			return writeJSON(cmd.OutOrStdout(), feeds)
 		}
+		if listYAML {
+			return writeYAML(cmd.OutOrStdout(), feeds)
+		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "ID\tTITLE\tURL\tFETCHED\tSTATUS")
@@ -45,5 +52,6 @@ var listCmd = &cobra.Command{
 
 func init() {
 	listCmd.Flags().BoolVar(&listJSON, "json", false, "output as JSON")
+	listCmd.Flags().BoolVar(&listYAML, "yaml", false, "output as YAML")
 	rootCmd.AddCommand(listCmd)
 }

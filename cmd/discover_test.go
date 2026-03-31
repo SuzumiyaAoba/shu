@@ -86,3 +86,40 @@ func TestDiscoverCmdJSON(t *testing.T) {
 		t.Errorf("expected JSON array with feed URL: %s", out)
 	}
 }
+
+func TestDiscoverCmdYAML(t *testing.T) {
+	htmlPage := `<!DOCTYPE html>
+<html><head>
+  <link rel="alternate" type="application/rss+xml" href="/feed.xml">
+</head><body></body></html>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		io.WriteString(w, htmlPage)
+	}))
+	defer ts.Close()
+
+	s, _ := store.NewSQLiteStore(":memory:")
+	t.Cleanup(func() { s.Close() })
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	service := core.New(s, logger)
+	service.SetHTTPClient(ts.Client())
+	svc = service
+
+	origPre := rootCmd.PersistentPreRunE
+	origPost := rootCmd.PersistentPostRunE
+	rootCmd.PersistentPreRunE = nil
+	rootCmd.PersistentPostRunE = nil
+	t.Cleanup(func() {
+		rootCmd.PersistentPreRunE = origPre
+		rootCmd.PersistentPostRunE = origPost
+	})
+
+	out, err := executeCommand("discover", ts.URL, "--yaml")
+	if err != nil {
+		t.Fatalf("discover --yaml failed: %v", err)
+	}
+	if !strings.Contains(out, "/feed.xml") {
+		t.Errorf("expected YAML output with feed URL: %s", out)
+	}
+}
