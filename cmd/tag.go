@@ -98,6 +98,7 @@ var tagsCmd = &cobra.Command{
 func init() {
 	tagsCmd.Flags().BoolVar(&tagsJSON, "json", false, "output as JSON")
 	tagsCmd.Flags().BoolVar(&tagsYAML, "yaml", false, "output as YAML")
+	tagsCmd.MarkFlagsMutuallyExclusive("json", "yaml")
 	rootCmd.AddCommand(tagCmd)
 	rootCmd.AddCommand(untagCmd)
 	rootCmd.AddCommand(tagsCmd)

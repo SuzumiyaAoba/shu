@@ -53,5 +53,6 @@ var listCmd = &cobra.Command{
 func init() {
 	listCmd.Flags().BoolVar(&listJSON, "json", false, "output as JSON")
 	listCmd.Flags().BoolVar(&listYAML, "yaml", false, "output as YAML")
+	listCmd.MarkFlagsMutuallyExclusive("json", "yaml")
 	rootCmd.AddCommand(listCmd)
 }

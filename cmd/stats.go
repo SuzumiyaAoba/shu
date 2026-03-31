@@ -46,5 +46,6 @@ var statsCmd = &cobra.Command{
 func init() {
 	statsCmd.Flags().BoolVar(&statsJSON, "json", false, "output as JSON")
 	statsCmd.Flags().BoolVar(&statsYAML, "yaml", false, "output as YAML")
+	statsCmd.MarkFlagsMutuallyExclusive("json", "yaml")
 	rootCmd.AddCommand(statsCmd)
 }

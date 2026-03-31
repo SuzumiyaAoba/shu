@@ -46,5 +46,6 @@ func init() {
 	searchCmd.Flags().IntVar(&searchLimit, "limit", 20, "max results")
 	searchCmd.Flags().BoolVar(&searchJSON, "json", false, "output as JSON")
 	searchCmd.Flags().BoolVar(&searchYAML, "yaml", false, "output as YAML")
+	searchCmd.MarkFlagsMutuallyExclusive("json", "yaml")
 	rootCmd.AddCommand(searchCmd)
 }

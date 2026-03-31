@@ -99,5 +99,6 @@ func init() {
 	entriesCmd.Flags().BoolVar(&entriesStarred, "starred", false, "show only starred entries")
 	entriesCmd.Flags().StringVar(&entriesTag, "tag", "", "filter by feed tag")
 	entriesCmd.Flags().StringVar(&entriesFormat, "format", "", "output format: markdown")
+	entriesCmd.MarkFlagsMutuallyExclusive("json", "yaml")
 	rootCmd.AddCommand(entriesCmd)
 }

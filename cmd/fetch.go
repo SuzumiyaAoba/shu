@@ -64,5 +64,6 @@ func init() {
 	fetchCmd.Flags().Int64Var(&fetchFeedID, "feed-id", 0, "fetch a specific feed by ID")
 	fetchCmd.Flags().BoolVar(&fetchJSON, "json", false, "output as JSON")
 	fetchCmd.Flags().BoolVar(&fetchYAML, "yaml", false, "output as YAML")
+	fetchCmd.MarkFlagsMutuallyExclusive("json", "yaml")
 	rootCmd.AddCommand(fetchCmd)
 }

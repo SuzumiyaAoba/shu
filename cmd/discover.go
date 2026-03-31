@@ -42,5 +42,6 @@ var discoverCmd = &cobra.Command{
 func init() {
 	discoverCmd.Flags().BoolVar(&discoverJSON, "json", false, "output as JSON")
 	discoverCmd.Flags().BoolVar(&discoverYAML, "yaml", false, "output as YAML")
+	discoverCmd.MarkFlagsMutuallyExclusive("json", "yaml")
 	rootCmd.AddCommand(discoverCmd)
 }

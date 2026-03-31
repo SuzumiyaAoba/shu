@@ -143,14 +143,25 @@ func (s *Service) FetchFeed(ctx context.Context, feedID int64) ([]*Entry, error)
 
 	s.logger.Info("feed fetched", "id", feedID, "title", feed.Title, "new_entries", inserted)
 
-	// Return only newly inserted entries.
-	newEntries := entries[:0]
+	// Return newly inserted entries for convenience.
+	// We retrieve them by querying the newest `inserted` entries for this feed.
+	if inserted == 0 {
+		return nil, nil
+	}
 	if inserted == len(entries) {
-		newEntries = entries
-	} else if inserted > 0 {
-		newEntries = entries[:inserted]
+		return entries, nil
 	}
 
+	filter := EntryFilter{
+		FeedID: &feedID,
+		Limit:  inserted,
+	}
+	newEntries, err := s.store.ListEntries(ctx, filter)
+	if err != nil {
+		s.logger.Warn("failed to retrieve newly inserted entries", "id", feedID, "error", err)
+		// We can gracefully format the first few entries since the actual exact set is unknown.
+		return entries[:inserted], nil
+	}
 	return newEntries, nil
 }
 
@@ -224,11 +235,11 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 		Link:         item.Link,
 		Summary:      item.Description,
 		Content:      item.Content,
-		Categories:   "[]",
-		Enclosures:   "[]",
-		Authors:      "[]",
-		Links:        "[]",
-		Contributors: "[]",
+		Categories:   json.RawMessage("[]"),
+		Enclosures:   json.RawMessage("[]"),
+		Authors:      json.RawMessage("[]"),
+		Links:        json.RawMessage("[]"),
+		Contributors: json.RawMessage("[]"),
 	}
 
 	// Published date.
@@ -262,7 +273,7 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 			persons[i] = person{Name: a.Name, Email: a.Email, URI: a.URI}
 		}
 		b, _ := json.Marshal(persons)
-		e.Authors = string(b)
+		e.Authors = b
 	} else if len(item.Authors) > 0 {
 		persons := make([]person, 0, len(item.Authors))
 		for _, a := range item.Authors {
@@ -272,7 +283,7 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 		}
 		if len(persons) > 0 {
 			b, _ := json.Marshal(persons)
-			e.Authors = string(b)
+			e.Authors = b
 		}
 	}
 
@@ -286,14 +297,14 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 			}
 		}
 		b, _ := json.Marshal(links)
-		e.Links = string(b)
+		e.Links = b
 	} else if len(item.Links) > 0 {
 		links := make([]link, len(item.Links))
 		for i, href := range item.Links {
 			links[i] = link{Href: href}
 		}
 		b, _ := json.Marshal(links)
-		e.Links = string(b)
+		e.Links = b
 	}
 
 	// --- Categories (structured with term/scheme/label) ---
@@ -303,14 +314,14 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 			cats[i] = category{Term: c.Term, Scheme: c.Scheme, Label: c.Label}
 		}
 		b, _ := json.Marshal(cats)
-		e.Categories = string(b)
+		e.Categories = b
 	} else if len(item.Categories) > 0 {
 		cats := make([]category, len(item.Categories))
 		for i, c := range item.Categories {
 			cats[i] = category{Term: c}
 		}
 		b, _ := json.Marshal(cats)
-		e.Categories = string(b)
+		e.Categories = b
 	}
 
 	// --- Enclosures ---
@@ -320,7 +331,7 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 			encs[i] = enclosure{URL: v.URL, Length: v.Length, Type: v.Type}
 		}
 		b, _ := json.Marshal(encs)
-		e.Enclosures = string(b)
+		e.Enclosures = b
 	}
 
 	// --- Contributors (Atom only) ---
@@ -330,7 +341,7 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 			persons[i] = person{Name: c.Name, Email: c.Email, URI: c.URI}
 		}
 		b, _ := json.Marshal(persons)
-		e.Contributors = string(b)
+		e.Contributors = b
 	}
 
 	// --- Rights (Atom only) ---
@@ -346,7 +357,7 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 			Updated: atomEntry.Source.Updated,
 		}
 		b, _ := json.Marshal(src)
-		e.Source = string(b)
+		e.Source = b
 	}
 
 	return e

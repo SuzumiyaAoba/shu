@@ -57,7 +57,7 @@ func TestTagsCmdJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tags --json failed: %v", err)
 	}
-	if !strings.Contains(out, `"Name"`) || !strings.Contains(out, "tech") {
+	if !strings.Contains(out, `"name"`) || !strings.Contains(out, "tech") {
 		t.Errorf("expected JSON output with tag data: %s", out)
 	}
 }

@@ -11,6 +11,8 @@ import (
 
 	"github.com/SuzumiyaAoba/shu/core"
 	"github.com/SuzumiyaAoba/shu/store"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // setupTest creates an in-memory Service backed by a real SQLite store and a
@@ -69,9 +71,20 @@ func executeCommand(args ...string) (string, error) {
 	return buf.String(), err
 }
 
+// clearFlags recursively resets flag.Changed = false for a command and its subcommands
+func clearFlags(cmd *cobra.Command) {
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		f.Changed = false
+	})
+	for _, sub := range cmd.Commands() {
+		clearFlags(sub)
+	}
+}
+
 // resetFlags resets subcommand flag values to their defaults so that flag state
 // from one test does not leak into the next.
 func resetFlags() {
+	clearFlags(rootCmd)
 	addTitle = ""
 	addJSON = false
 	addYAML = false

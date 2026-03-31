@@ -2,13 +2,14 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/SuzumiyaAoba/shu/core"
 )
 
-func newTestStore(t *testing.T) Store {
+func newTestStore(t *testing.T) *SQLiteStore {
 	t.Helper()
 	s, err := NewSQLiteStore(":memory:")
 	if err != nil {
@@ -152,7 +153,7 @@ func TestRemoveFeedCascadesEntries(t *testing.T) {
 	_ = s.AddFeed(ctx, feed)
 
 	entries := []*core.Entry{
-		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	}
 	_, _ = s.AddEntries(ctx, entries)
 
@@ -195,8 +196,8 @@ func TestAddEntries(t *testing.T) {
 
 	now := time.Now()
 	entries := []*core.Entry{
-		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1", Link: "https://example.com/1", PublishedAt: &now, Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
-		{FeedID: feed.ID, GUID: "guid-2", Title: "Entry 2", Link: "https://example.com/2", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1", Link: "https://example.com/1", PublishedAt: &now, Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed.ID, GUID: "guid-2", Title: "Entry 2", Link: "https://example.com/2", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	}
 
 	inserted, err := s.AddEntries(ctx, entries)
@@ -227,15 +228,15 @@ func TestAddEntriesExpandedFields(t *testing.T) {
 			Content:    "<p>Full HTML content</p>",
 			Author:     "John Doe",
 			ImageURL:   "https://example.com/image.jpg",
-			Categories: `["go","rss","tech"]`,
+			Categories:   json.RawMessage(`["go","rss","tech"]`),
 			PublishedAt: &now,
 			UpdatedAt:  &updated,
-			Enclosures:   `[{"url":"https://example.com/ep1.mp3","length":"12345","type":"audio/mpeg"}]`,
-			Authors:      `[{"name":"John Doe","email":"john@example.com","uri":"https://john.example.com"}]`,
-			Links:        `[{"href":"https://example.com/full","rel":"alternate","type":"text/html","hreflang":"","title":"","length":""}]`,
-			Contributors: `[{"name":"Jane","email":"jane@example.com","uri":""}]`,
+			Enclosures:   json.RawMessage(`[{"url":"https://example.com/ep1.mp3","length":"12345","type":"audio/mpeg"}]`),
+			Authors:      json.RawMessage(`[{"name":"John Doe","email":"john@example.com","uri":"https://john.example.com"}]`),
+			Links:        json.RawMessage(`[{"href":"https://example.com/full","rel":"alternate","type":"text/html","hreflang":"","title":"","length":""}]`),
+			Contributors: json.RawMessage(`[{"name":"Jane","email":"jane@example.com","uri":""}]`),
 			Rights:       "Copyright 2026",
-			Source:        `{"title":"Original","id":"urn:uuid:source","updated":"2026-01-01T00:00:00Z"}`,
+			Source:       json.RawMessage(`{"title":"Original","id":"urn:uuid:source","updated":"2026-01-01T00:00:00Z"}`),
 		},
 	}
 
@@ -267,28 +268,28 @@ func TestAddEntriesExpandedFields(t *testing.T) {
 	if e.ImageURL != "https://example.com/image.jpg" {
 		t.Errorf("ImageURL = %q, want %q", e.ImageURL, "https://example.com/image.jpg")
 	}
-	if e.Categories != `["go","rss","tech"]` {
+	if string(e.Categories) != `["go","rss","tech"]` {
 		t.Errorf("Categories = %q, want %q", e.Categories, `["go","rss","tech"]`)
 	}
 	if e.UpdatedAt == nil {
 		t.Error("expected UpdatedAt to be set")
 	}
-	if e.Enclosures != `[{"url":"https://example.com/ep1.mp3","length":"12345","type":"audio/mpeg"}]` {
+	if string(e.Enclosures) != `[{"url":"https://example.com/ep1.mp3","length":"12345","type":"audio/mpeg"}]` {
 		t.Errorf("Enclosures = %q, want JSON with podcast enclosure", e.Enclosures)
 	}
-	if e.Authors != `[{"name":"John Doe","email":"john@example.com","uri":"https://john.example.com"}]` {
+	if string(e.Authors) != `[{"name":"John Doe","email":"john@example.com","uri":"https://john.example.com"}]` {
 		t.Errorf("Authors = %q", e.Authors)
 	}
-	if e.Links != `[{"href":"https://example.com/full","rel":"alternate","type":"text/html","hreflang":"","title":"","length":""}]` {
+	if string(e.Links) != `[{"href":"https://example.com/full","rel":"alternate","type":"text/html","hreflang":"","title":"","length":""}]` {
 		t.Errorf("Links = %q", e.Links)
 	}
-	if e.Contributors != `[{"name":"Jane","email":"jane@example.com","uri":""}]` {
+	if string(e.Contributors) != `[{"name":"Jane","email":"jane@example.com","uri":""}]` {
 		t.Errorf("Contributors = %q", e.Contributors)
 	}
 	if e.Rights != "Copyright 2026" {
 		t.Errorf("Rights = %q, want %q", e.Rights, "Copyright 2026")
 	}
-	if e.Source != `{"title":"Original","id":"urn:uuid:source","updated":"2026-01-01T00:00:00Z"}` {
+	if string(e.Source) != `{"title":"Original","id":"urn:uuid:source","updated":"2026-01-01T00:00:00Z"}` {
 		t.Errorf("Source = %q", e.Source)
 	}
 }
@@ -301,14 +302,14 @@ func TestAddEntriesDeduplication(t *testing.T) {
 	_ = s.AddFeed(ctx, feed)
 
 	entries := []*core.Entry{
-		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	}
 	_, _ = s.AddEntries(ctx, entries)
 
 	// Same GUID should be skipped
 	dupes := []*core.Entry{
-		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1 Updated", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
-		{FeedID: feed.ID, GUID: "guid-2", Title: "Entry 2", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1 Updated", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed.ID, GUID: "guid-2", Title: "Entry 2", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	}
 	inserted, err := s.AddEntries(ctx, dupes)
 	if err != nil {
@@ -340,9 +341,9 @@ func TestListEntries(t *testing.T) {
 	_ = s.AddFeed(ctx, feed)
 
 	entries := []*core.Entry{
-		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
-		{FeedID: feed.ID, GUID: "2", Title: "Entry 2", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
-		{FeedID: feed.ID, GUID: "3", Title: "Entry 3", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed.ID, GUID: "2", Title: "Entry 2", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed.ID, GUID: "3", Title: "Entry 3", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	}
 	_, _ = s.AddEntries(ctx, entries)
 
@@ -365,9 +366,9 @@ func TestListEntriesFilterByFeed(t *testing.T) {
 	_ = s.AddFeed(ctx, feed2)
 
 	_, _ = s.AddEntries(ctx, []*core.Entry{
-		{FeedID: feed1.ID, GUID: "a1", Title: "A1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
-		{FeedID: feed1.ID, GUID: "a2", Title: "A2", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
-		{FeedID: feed2.ID, GUID: "b1", Title: "B1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed1.ID, GUID: "a1", Title: "A1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed1.ID, GUID: "a2", Title: "A2", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed2.ID, GUID: "b1", Title: "B1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	})
 
 	feedID := feed1.ID
@@ -431,7 +432,7 @@ func TestMarkEntryReadUnread(t *testing.T) {
 	_ = s.AddFeed(ctx, feed)
 
 	_, _ = s.AddEntries(ctx, []*core.Entry{
-		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	})
 
 	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 1})
@@ -536,8 +537,8 @@ func TestListEntriesFilterByTag(t *testing.T) {
 	_ = s.AddFeed(ctx, feed2)
 
 	_, _ = s.AddEntries(ctx, []*core.Entry{
-		{FeedID: feed1.ID, GUID: "a1", Title: "A1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
-		{FeedID: feed2.ID, GUID: "b1", Title: "B1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed1.ID, GUID: "a1", Title: "A1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed2.ID, GUID: "b1", Title: "B1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	})
 
 	_ = s.AddTag(ctx, feed1.ID, "tagged")
@@ -562,9 +563,9 @@ func TestSearchEntries(t *testing.T) {
 	_ = s.AddFeed(ctx, feed)
 
 	_, _ = s.AddEntries(ctx, []*core.Entry{
-		{FeedID: feed.ID, GUID: "1", Title: "Golang Tutorial", Summary: "Learn Go", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
-		{FeedID: feed.ID, GUID: "2", Title: "Python Guide", Summary: "Learn Python", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
-		{FeedID: feed.ID, GUID: "3", Title: "Rust Basics", Content: "Rust is great for golang interop", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "1", Title: "Golang Tutorial", Summary: "Learn Go", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed.ID, GUID: "2", Title: "Python Guide", Summary: "Learn Python", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed.ID, GUID: "3", Title: "Rust Basics", Content: "Rust is great for golang interop", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	})
 
 	results, err := s.SearchEntries(ctx, "golang", 10)
@@ -592,7 +593,7 @@ func TestStarUnstarEntry(t *testing.T) {
 	_ = s.AddFeed(ctx, feed)
 
 	_, _ = s.AddEntries(ctx, []*core.Entry{
-		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	})
 
 	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 1})
@@ -691,8 +692,8 @@ func TestFeedStats(t *testing.T) {
 	_ = s.AddFeed(ctx, feed)
 
 	_, _ = s.AddEntries(ctx, []*core.Entry{
-		{FeedID: feed.ID, GUID: "1", Title: "E1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
-		{FeedID: feed.ID, GUID: "2", Title: "E2", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "1", Title: "E1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed.ID, GUID: "2", Title: "E2", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	})
 
 	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 1})
@@ -725,8 +726,8 @@ func TestCleanupEntries(t *testing.T) {
 	_ = s.AddFeed(ctx, feed)
 
 	_, _ = s.AddEntries(ctx, []*core.Entry{
-		{FeedID: feed.ID, GUID: "1", Title: "Old Entry", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
-		{FeedID: feed.ID, GUID: "2", Title: "Starred Old", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "1", Title: "Old Entry", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed.ID, GUID: "2", Title: "Starred Old", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	})
 
 	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 10})
@@ -756,7 +757,7 @@ func TestGetEntry(t *testing.T) {
 	_ = s.AddFeed(ctx, feed)
 
 	_, _ = s.AddEntries(ctx, []*core.Entry{
-		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Link: "https://example.com/1", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Link: "https://example.com/1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	})
 
 	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 1})
@@ -781,9 +782,9 @@ func TestFindDuplicateEntries(t *testing.T) {
 	_ = s.AddFeed(ctx, feed2)
 
 	_, _ = s.AddEntries(ctx, []*core.Entry{
-		{FeedID: feed1.ID, GUID: "a1", Title: "Shared Article", Link: "https://example.com/article", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
-		{FeedID: feed2.ID, GUID: "b1", Title: "Same Article", Link: "https://example.com/article", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
-		{FeedID: feed2.ID, GUID: "b2", Title: "Different Article", Link: "https://example.com/other", Categories: "[]", Enclosures: "[]", Authors: "[]", Links: "[]", Contributors: "[]"},
+		{FeedID: feed1.ID, GUID: "a1", Title: "Shared Article", Link: "https://example.com/article", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed2.ID, GUID: "b1", Title: "Same Article", Link: "https://example.com/article", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed2.ID, GUID: "b2", Title: "Different Article", Link: "https://example.com/other", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	})
 
 	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 10})

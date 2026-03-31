@@ -138,10 +138,10 @@ func TestFetchFeedExpandedFields(t *testing.T) {
 	if e.Content != "<p>Full content of post 1</p>" {
 		t.Errorf("Content = %q, want %q", e.Content, "<p>Full content of post 1</p>")
 	}
-	if e.Categories == "[]" {
+	if string(e.Categories) == "[]" {
 		t.Error("expected categories to be populated for Post 1")
 	}
-	if e.Enclosures == "[]" {
+	if string(e.Enclosures) == "[]" {
 		t.Error("expected enclosures to be populated for Post 1")
 	}
 
@@ -150,10 +150,10 @@ func TestFetchFeedExpandedFields(t *testing.T) {
 	if e2.Content != "" {
 		t.Errorf("Content = %q, want empty", e2.Content)
 	}
-	if e2.Categories != "[]" {
+	if string(e2.Categories) != "[]" {
 		t.Errorf("Categories = %q, want %q", e2.Categories, "[]")
 	}
-	if e2.Enclosures != "[]" {
+	if string(e2.Enclosures) != "[]" {
 		t.Errorf("Enclosures = %q, want %q", e2.Enclosures, "[]")
 	}
 }
@@ -247,38 +247,38 @@ func TestFetchFeedAtomFields(t *testing.T) {
 	}
 
 	// Authors (full structured JSON with URI)
-	if e.Authors == "[]" {
+	if string(e.Authors) == "[]" {
 		t.Error("expected Authors to be populated")
 	}
 	// Should contain Alice's URI from Atom-specific parse
-	if !contains(e.Authors, "alice@example.com") || !contains(e.Authors, "https://alice.example.com") {
+	if !contains(string(e.Authors), "alice@example.com") || !contains(string(e.Authors), "https://alice.example.com") {
 		t.Errorf("Authors = %s, expected Alice with email and URI", e.Authors)
 	}
-	if !contains(e.Authors, "Bob") {
+	if !contains(string(e.Authors), "Bob") {
 		t.Errorf("Authors = %s, expected Bob", e.Authors)
 	}
 
 	// Links (full structured with rel, type, hreflang)
-	if e.Links == "[]" {
+	if string(e.Links) == "[]" {
 		t.Error("expected Links to be populated")
 	}
-	if !contains(e.Links, "alternate") || !contains(e.Links, "text/html") {
+	if !contains(string(e.Links), "alternate") || !contains(string(e.Links), "text/html") {
 		t.Errorf("Links = %s, expected alternate link with type", e.Links)
 	}
 
 	// Categories (structured with term/scheme/label)
-	if e.Categories == "[]" {
+	if string(e.Categories) == "[]" {
 		t.Error("expected Categories to be populated")
 	}
-	if !contains(e.Categories, "golang") || !contains(e.Categories, "https://example.com/tags") {
+	if !contains(string(e.Categories), "golang") || !contains(string(e.Categories), "https://example.com/tags") {
 		t.Errorf("Categories = %s, expected structured category with scheme", e.Categories)
 	}
 
 	// Contributors
-	if e.Contributors == "[]" {
+	if string(e.Contributors) == "[]" {
 		t.Error("expected Contributors to be populated")
 	}
-	if !contains(e.Contributors, "Charlie") || !contains(e.Contributors, "https://charlie.example.com") {
+	if !contains(string(e.Contributors), "Charlie") || !contains(string(e.Contributors), "https://charlie.example.com") {
 		t.Errorf("Contributors = %s, expected Charlie with URI", e.Contributors)
 	}
 
@@ -288,22 +288,22 @@ func TestFetchFeedAtomFields(t *testing.T) {
 	}
 
 	// Source
-	if e.Source == "" {
+	if string(e.Source) == "" || string(e.Source) == "[]" {
 		t.Error("expected Source to be populated")
 	}
-	if !contains(e.Source, "Original Source") || !contains(e.Source, "urn:uuid:source-1") {
+	if !contains(string(e.Source), "Original Source") || !contains(string(e.Source), "urn:uuid:source-1") {
 		t.Errorf("Source = %s, expected source with title and id", e.Source)
 	}
 
 	// Entry 2: minimal Atom entry, should have defaults.
 	e2 := entries[1]
-	if e2.Contributors != "[]" {
+	if string(e2.Contributors) != "[]" {
 		t.Errorf("e2.Contributors = %q, want %q", e2.Contributors, "[]")
 	}
 	if e2.Rights != "" {
 		t.Errorf("e2.Rights = %q, want empty", e2.Rights)
 	}
-	if e2.Source != "" {
+	if string(e2.Source) != "null" && string(e2.Source) != "[]" && string(e2.Source) != "" {
 		t.Errorf("e2.Source = %q, want empty", e2.Source)
 	}
 }

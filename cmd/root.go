@@ -45,14 +45,18 @@ var rootCmd = &cobra.Command{
 	// logger, opens the SQLite database (creating the directory if needed),
 	// runs migrations, and constructs the core.Service.
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		level := slog.LevelInfo
+		var level slog.Level
 		switch logLevel {
 		case "debug":
 			level = slog.LevelDebug
+		case "info":
+			level = slog.LevelInfo
 		case "warn":
 			level = slog.LevelWarn
 		case "error":
 			level = slog.LevelError
+		default:
+			return fmt.Errorf("invalid log level: %q (must be debug, info, warn, error)", logLevel)
 		}
 		logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 

@@ -51,5 +51,6 @@ var duplicatesCmd = &cobra.Command{
 func init() {
 	duplicatesCmd.Flags().BoolVar(&duplicatesJSON, "json", false, "output as JSON")
 	duplicatesCmd.Flags().BoolVar(&duplicatesYAML, "yaml", false, "output as YAML")
+	duplicatesCmd.MarkFlagsMutuallyExclusive("json", "yaml")
 	rootCmd.AddCommand(duplicatesCmd)
 }

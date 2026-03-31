@@ -134,11 +134,20 @@ func (s *SQLiteStore) runMigrations() error {
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", name, err)
 		}
-		if _, err := s.db.Exec(string(data)); err != nil {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return fmt.Errorf("begin tx for migration %s: %w", name, err)
+		}
+		if _, err := tx.Exec(string(data)); err != nil {
+			tx.Rollback()
 			return fmt.Errorf("run migration %s: %w", name, err)
 		}
-		if _, err := s.db.Exec(`INSERT INTO schema_migrations (filename) VALUES (?)`, name); err != nil {
+		if _, err := tx.Exec(`INSERT INTO schema_migrations (filename) VALUES (?)`, name); err != nil {
+			tx.Rollback()
 			return fmt.Errorf("record migration %s: %w", name, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit migration %s: %w", name, err)
 		}
 	}
 	return nil
@@ -257,8 +266,8 @@ func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (in
 	for _, e := range entries {
 		result, err := stmt.ExecContext(ctx,
 			e.FeedID, e.GUID, e.Title, e.Link, e.Summary, formatNullableTime(e.PublishedAt),
-			e.Content, e.Author, e.ImageURL, e.Categories, formatNullableTime(e.UpdatedAt), e.Enclosures,
-			e.Authors, e.Links, e.Contributors, e.Rights, e.Source,
+			e.Content, e.Author, e.ImageURL, string(e.Categories), formatNullableTime(e.UpdatedAt), string(e.Enclosures),
+			string(e.Authors), string(e.Links), string(e.Contributors), e.Rights, string(e.Source),
 		)
 		if err != nil {
 			return 0, fmt.Errorf("insert entry: %w", err)
@@ -393,11 +402,13 @@ func scanEntry(s scanner) (*core.Entry, error) {
 	var readAt *string
 	var starredAt *string
 
+	var categories, enclosures, authors, links, contributors, source string
+
 	if err := s.Scan(
 		&e.ID, &e.FeedID, &e.GUID, &e.Title, &e.Link, &e.Summary,
 		&publishedAt, &fetchedAt,
-		&e.Content, &e.Author, &e.ImageURL, &e.Categories, &updatedAt, &e.Enclosures,
-		&e.Authors, &e.Links, &e.Contributors, &e.Rights, &e.Source,
+		&e.Content, &e.Author, &e.ImageURL, &categories, &updatedAt, &enclosures,
+		&authors, &links, &contributors, &e.Rights, &source,
 		&readAt, &starredAt,
 	); err != nil {
 		return nil, fmt.Errorf("scan entry: %w", err)
@@ -421,6 +432,19 @@ func scanEntry(s scanner) (*core.Entry, error) {
 	if e.StarredAt, err = parseNullableTime(starredAt, "starred_at"); err != nil {
 		return nil, err
 	}
+
+	e.Categories = []byte(categories)
+	if len(e.Categories) == 0 { e.Categories = nil }
+	e.Enclosures = []byte(enclosures)
+	if len(e.Enclosures) == 0 { e.Enclosures = nil }
+	e.Authors = []byte(authors)
+	if len(e.Authors) == 0 { e.Authors = nil }
+	e.Links = []byte(links)
+	if len(e.Links) == 0 { e.Links = nil }
+	e.Contributors = []byte(contributors)
+	if len(e.Contributors) == 0 { e.Contributors = nil }
+	e.Source = []byte(source)
+	if len(e.Source) == 0 { e.Source = nil }
 
 	return &e, nil
 }

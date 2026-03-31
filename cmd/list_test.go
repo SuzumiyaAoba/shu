@@ -40,7 +40,7 @@ func TestListCmdJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list --json failed: %v", err)
 	}
-	if !strings.Contains(out, `"Title"`) || !strings.Contains(out, "Test Blog") {
+	if !strings.Contains(out, `"title"`) || !strings.Contains(out, "Test Blog") {
 		t.Errorf("expected JSON output with feed data: %s", out)
 	}
 }

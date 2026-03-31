@@ -48,7 +48,7 @@ func TestAddCmdJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("add --json failed: %v", err)
 	}
-	if !strings.Contains(out, `"Title"`) || !strings.Contains(out, "Test Blog") {
+	if !strings.Contains(out, `"title"`) || !strings.Contains(out, "Test Blog") {
 		t.Errorf("expected JSON output with feed data: %s", out)
 	}
 }

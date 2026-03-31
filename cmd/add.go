@@ -50,5 +50,6 @@ func init() {
 	addCmd.Flags().StringVar(&addTitle, "title", "", "override feed title")
 	addCmd.Flags().BoolVar(&addJSON, "json", false, "output as JSON")
 	addCmd.Flags().BoolVar(&addYAML, "yaml", false, "output as YAML")
+	addCmd.MarkFlagsMutuallyExclusive("json", "yaml")
 	rootCmd.AddCommand(addCmd)
 }

@@ -74,7 +74,7 @@ func TestEntriesCmdJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("entries --json failed: %v", err)
 	}
-	if !strings.Contains(out, `"Title"`) || !strings.Contains(out, "Post 1") {
+	if !strings.Contains(out, `"title"`) || !strings.Contains(out, "Post 1") {
 		t.Errorf("expected JSON output: %s", out)
 	}
 }

@@ -1,8 +1,10 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -16,7 +18,7 @@ func (s *Service) DiscoverFeeds(ctx context.Context, pageURL string) ([]string, 
 		return nil, fmt.Errorf("fetch page %s: %w", pageURL, err)
 	}
 
-	doc, err := html.Parse(strings.NewReader(string(body)))
+	doc, err := html.Parse(bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("parse HTML: %w", err)
 	}
@@ -57,26 +59,15 @@ func isFeedType(typ string) bool {
 	return false
 }
 
-// resolveURL resolves href relative to base. For simplicity, if href is already
-// absolute it is returned as-is; otherwise it is joined with the base URL.
+// resolveURL resolves href relative to base.
 func resolveURL(base, href string) string {
-	if strings.HasPrefix(href, "http://") || strings.HasPrefix(href, "https://") {
+	baseURL, err := url.Parse(base)
+	if err != nil {
 		return href
 	}
-	// Strip path from base to get origin.
-	if idx := strings.Index(base, "://"); idx != -1 {
-		rest := base[idx+3:]
-		if slash := strings.Index(rest, "/"); slash != -1 {
-			if strings.HasPrefix(href, "/") {
-				return base[:idx+3+slash] + href
-			}
-			// Relative path — join with directory of base.
-			dir := rest[:strings.LastIndex(rest, "/")+1]
-			return base[:idx+3] + dir + href
-		}
+	ref, err := url.Parse(href)
+	if err != nil {
+		return href
 	}
-	if strings.HasPrefix(href, "/") {
-		return strings.TrimRight(base, "/") + href
-	}
-	return base + "/" + href
+	return baseURL.ResolveReference(ref).String()
 }
