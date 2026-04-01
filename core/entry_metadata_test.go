@@ -2,6 +2,7 @@ package core_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -95,5 +96,46 @@ func TestEntryMetadataHelpersEmptyValues(t *testing.T) {
 	}
 	if source != nil {
 		t.Fatalf("expected nil source, got %+v", source)
+	}
+}
+
+func TestEntryMetadataHelpersUseCache(t *testing.T) {
+	entry := &core.Entry{
+		Categories: json.RawMessage(`[{"term":"go"}]`),
+		Source:     json.RawMessage(`{"title":"cached","id":"1","updated":"2026-01-01T00:00:00Z"}`),
+	}
+
+	categories, err := entry.ParseCategories()
+	if err != nil {
+		t.Fatalf("ParseCategories failed: %v", err)
+	}
+	if len(categories) != 1 {
+		t.Fatalf("unexpected categories: %+v", categories)
+	}
+
+	entry.Categories = json.RawMessage(`invalid json`)
+	categories, err = entry.ParseCategories()
+	if err != nil {
+		t.Fatalf("expected cached ParseCategories result, got error: %v", err)
+	}
+	if len(categories) != 1 || categories[0].Term != "go" {
+		t.Fatalf("unexpected cached categories: %+v", categories)
+	}
+
+	source, err := entry.ParseSource()
+	if err != nil {
+		t.Fatalf("ParseSource failed: %v", err)
+	}
+	if source == nil || source.Title != "cached" {
+		t.Fatalf("unexpected source: %+v", source)
+	}
+
+	entry.Source = json.RawMessage(`invalid json`)
+	source, err = entry.ParseSource()
+	if err != nil {
+		t.Fatalf("expected cached ParseSource result, got error: %v", err)
+	}
+	if source == nil || source.Title != "cached" {
+		t.Fatalf("unexpected cached source: %+v", source)
 	}
 }

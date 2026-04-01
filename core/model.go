@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"sync"
 	"time"
 )
 
@@ -128,6 +129,8 @@ type Entry struct {
 	// StarredAt records when the entry was bookmarked/starred.
 	// It is nil if the entry has not been starred.
 	StarredAt *time.Time `json:"starred_at"`
+
+	metadataCache entryMetadataCache `json:"-"`
 }
 
 // EntryFilter specifies criteria for querying stored entries.
@@ -175,4 +178,27 @@ type FeedStats struct {
 	ErrorCount   int        `json:"error_count"`
 	LastError    string     `json:"last_error"`
 	Disabled     bool       `json:"disabled"`
+}
+
+type entryMetadataCache struct {
+	mu sync.RWMutex
+
+	categoriesParsed   bool
+	categories         []EntryCategory
+	categoriesErr      error
+	enclosuresParsed   bool
+	enclosures         []EntryEnclosure
+	enclosuresErr      error
+	authorsParsed      bool
+	authors            []EntryPerson
+	authorsErr         error
+	linksParsed        bool
+	links              []EntryLink
+	linksErr           error
+	contributorsParsed bool
+	contributors       []EntryPerson
+	contributorsErr    error
+	sourceParsed       bool
+	source             *EntrySource
+	sourceErr          error
 }

@@ -8,11 +8,11 @@ import (
 )
 
 func tagCommands(getService serviceGetter) []*cobra.Command {
-	return []*cobra.Command{
+	return withGroup("tags",
 		newTagCmd(getService),
 		newUntagCmd(getService),
 		newTagsCmd(getService),
-	}
+	)
 }
 
 func newTagCmd(getService serviceGetter) *cobra.Command {

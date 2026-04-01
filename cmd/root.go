@@ -64,6 +64,14 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 		},
 	}
 
+	rootCmd.AddGroup(
+		&cobra.Group{ID: "feeds", Title: "Feed Commands"},
+		&cobra.Group{ID: "entries", Title: "Entry Commands"},
+		&cobra.Group{ID: "tags", Title: "Tag Commands"},
+		&cobra.Group{ID: "maintenance", Title: "Maintenance Commands"},
+		&cobra.Group{ID: "opml", Title: "Import/Export Commands"},
+	)
+
 	rootCmd.PersistentFlags().StringVar(&dbPath, "db", defaultDB, "path to SQLite database")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level (debug, info, warn, error)")
 
@@ -74,6 +82,13 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 	rootCmd.AddCommand(opmlCommands(getService)...)
 
 	return rootCmd
+}
+
+func withGroup(groupID string, commands ...*cobra.Command) []*cobra.Command {
+	for _, cmd := range commands {
+		cmd.GroupID = groupID
+	}
+	return commands
 }
 
 // Execute runs the root command and exits with code 1 on error.

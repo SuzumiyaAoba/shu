@@ -9,10 +9,10 @@ import (
 )
 
 func opmlCommands(getService serviceGetter) []*cobra.Command {
-	return []*cobra.Command{
+	return withGroup("opml",
 		newImportCmd(getService),
 		newExportCmd(getService),
-	}
+	)
 }
 
 func newImportCmd(getService serviceGetter) *cobra.Command {

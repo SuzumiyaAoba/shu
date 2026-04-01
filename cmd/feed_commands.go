@@ -9,7 +9,7 @@ import (
 )
 
 func feedCommands(getService serviceGetter) []*cobra.Command {
-	return []*cobra.Command{
+	return withGroup("feeds",
 		newAddCmd(getService),
 		newListCmd(getService),
 		newFetchCmd(getService),
@@ -18,7 +18,7 @@ func feedCommands(getService serviceGetter) []*cobra.Command {
 		newRemoveCmd(getService),
 		newEnableCmd(getService),
 		newDisableCmd(getService),
-	}
+	)
 }
 
 // newAddCmd implements "shu add <url>".

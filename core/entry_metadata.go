@@ -46,40 +46,137 @@ type EntrySource struct {
 
 // ParseCategories decodes Categories into a typed slice.
 func (e *Entry) ParseCategories() ([]EntryCategory, error) {
-	return parseRawSlice[EntryCategory](e.Categories, "categories")
+	e.metadataCache.mu.RLock()
+	if e.metadataCache.categoriesParsed {
+		defer e.metadataCache.mu.RUnlock()
+		return e.metadataCache.categories, e.metadataCache.categoriesErr
+	}
+	e.metadataCache.mu.RUnlock()
+
+	values, err := parseRawSlice[EntryCategory](e.Categories, "categories")
+
+	e.metadataCache.mu.Lock()
+	defer e.metadataCache.mu.Unlock()
+	if !e.metadataCache.categoriesParsed {
+		e.metadataCache.categories = values
+		e.metadataCache.categoriesErr = err
+		e.metadataCache.categoriesParsed = true
+	}
+	return e.metadataCache.categories, e.metadataCache.categoriesErr
 }
 
 // ParseEnclosures decodes Enclosures into a typed slice.
 func (e *Entry) ParseEnclosures() ([]EntryEnclosure, error) {
-	return parseRawSlice[EntryEnclosure](e.Enclosures, "enclosures")
+	e.metadataCache.mu.RLock()
+	if e.metadataCache.enclosuresParsed {
+		defer e.metadataCache.mu.RUnlock()
+		return e.metadataCache.enclosures, e.metadataCache.enclosuresErr
+	}
+	e.metadataCache.mu.RUnlock()
+
+	values, err := parseRawSlice[EntryEnclosure](e.Enclosures, "enclosures")
+
+	e.metadataCache.mu.Lock()
+	defer e.metadataCache.mu.Unlock()
+	if !e.metadataCache.enclosuresParsed {
+		e.metadataCache.enclosures = values
+		e.metadataCache.enclosuresErr = err
+		e.metadataCache.enclosuresParsed = true
+	}
+	return e.metadataCache.enclosures, e.metadataCache.enclosuresErr
 }
 
 // ParseAuthors decodes Authors into a typed slice.
 func (e *Entry) ParseAuthors() ([]EntryPerson, error) {
-	return parseRawSlice[EntryPerson](e.Authors, "authors")
+	e.metadataCache.mu.RLock()
+	if e.metadataCache.authorsParsed {
+		defer e.metadataCache.mu.RUnlock()
+		return e.metadataCache.authors, e.metadataCache.authorsErr
+	}
+	e.metadataCache.mu.RUnlock()
+
+	values, err := parseRawSlice[EntryPerson](e.Authors, "authors")
+
+	e.metadataCache.mu.Lock()
+	defer e.metadataCache.mu.Unlock()
+	if !e.metadataCache.authorsParsed {
+		e.metadataCache.authors = values
+		e.metadataCache.authorsErr = err
+		e.metadataCache.authorsParsed = true
+	}
+	return e.metadataCache.authors, e.metadataCache.authorsErr
 }
 
 // ParseLinks decodes Links into a typed slice.
 func (e *Entry) ParseLinks() ([]EntryLink, error) {
-	return parseRawSlice[EntryLink](e.Links, "links")
+	e.metadataCache.mu.RLock()
+	if e.metadataCache.linksParsed {
+		defer e.metadataCache.mu.RUnlock()
+		return e.metadataCache.links, e.metadataCache.linksErr
+	}
+	e.metadataCache.mu.RUnlock()
+
+	values, err := parseRawSlice[EntryLink](e.Links, "links")
+
+	e.metadataCache.mu.Lock()
+	defer e.metadataCache.mu.Unlock()
+	if !e.metadataCache.linksParsed {
+		e.metadataCache.links = values
+		e.metadataCache.linksErr = err
+		e.metadataCache.linksParsed = true
+	}
+	return e.metadataCache.links, e.metadataCache.linksErr
 }
 
 // ParseContributors decodes Contributors into a typed slice.
 func (e *Entry) ParseContributors() ([]EntryPerson, error) {
-	return parseRawSlice[EntryPerson](e.Contributors, "contributors")
+	e.metadataCache.mu.RLock()
+	if e.metadataCache.contributorsParsed {
+		defer e.metadataCache.mu.RUnlock()
+		return e.metadataCache.contributors, e.metadataCache.contributorsErr
+	}
+	e.metadataCache.mu.RUnlock()
+
+	values, err := parseRawSlice[EntryPerson](e.Contributors, "contributors")
+
+	e.metadataCache.mu.Lock()
+	defer e.metadataCache.mu.Unlock()
+	if !e.metadataCache.contributorsParsed {
+		e.metadataCache.contributors = values
+		e.metadataCache.contributorsErr = err
+		e.metadataCache.contributorsParsed = true
+	}
+	return e.metadataCache.contributors, e.metadataCache.contributorsErr
 }
 
 // ParseSource decodes Source into a typed object.
 func (e *Entry) ParseSource() (*EntrySource, error) {
-	if isEmptyRawMessage(e.Source) {
-		return nil, nil
+	e.metadataCache.mu.RLock()
+	if e.metadataCache.sourceParsed {
+		defer e.metadataCache.mu.RUnlock()
+		return e.metadataCache.source, e.metadataCache.sourceErr
+	}
+	e.metadataCache.mu.RUnlock()
+
+	var source *EntrySource
+	var err error
+	if !isEmptyRawMessage(e.Source) {
+		parsed := new(EntrySource)
+		if unmarshalErr := json.Unmarshal(e.Source, parsed); unmarshalErr != nil {
+			err = fmt.Errorf("parse source: %w", unmarshalErr)
+		} else {
+			source = parsed
+		}
 	}
 
-	var source EntrySource
-	if err := json.Unmarshal(e.Source, &source); err != nil {
-		return nil, fmt.Errorf("parse source: %w", err)
+	e.metadataCache.mu.Lock()
+	defer e.metadataCache.mu.Unlock()
+	if !e.metadataCache.sourceParsed {
+		e.metadataCache.source = source
+		e.metadataCache.sourceErr = err
+		e.metadataCache.sourceParsed = true
 	}
-	return &source, nil
+	return e.metadataCache.source, e.metadataCache.sourceErr
 }
 
 func parseRawSlice[T any](data json.RawMessage, field string) ([]T, error) {

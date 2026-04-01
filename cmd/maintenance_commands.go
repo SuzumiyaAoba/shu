@@ -11,11 +11,11 @@ import (
 )
 
 func maintenanceCommands(getService serviceGetter) []*cobra.Command {
-	return []*cobra.Command{
+	return withGroup("maintenance",
 		newStatsCmd(getService),
 		newCleanupCmd(getService),
 		newRunCmd(getService),
-	}
+	)
 }
 
 func newStatsCmd(getService serviceGetter) *cobra.Command {

@@ -12,7 +12,7 @@ import (
 )
 
 func entryCommands(getService serviceGetter) []*cobra.Command {
-	return []*cobra.Command{
+	return withGroup("entries",
 		newEntriesCmd(getService),
 		newReadCmd(getService),
 		newUnreadCmd(getService),
@@ -21,7 +21,7 @@ func entryCommands(getService serviceGetter) []*cobra.Command {
 		newOpenCmd(getService),
 		newSearchCmd(getService),
 		newDuplicatesCmd(getService),
-	}
+	)
 }
 
 func newEntriesCmd(getService serviceGetter) *cobra.Command {
