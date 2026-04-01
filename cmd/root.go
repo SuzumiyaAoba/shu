@@ -1,13 +1,13 @@
 // Package cmd implements the CLI layer for the shu RSS aggregator using the
 // Cobra command framework.
 //
-// This package is the CLI frontend. It bootstraps a reusable runtime instance
-// from the app package in PersistentPreRunE, makes the resulting service
-// available to subcommands via the package-level svc variable, and closes the
-// runtime in PersistentPostRunE.
+// This package is the CLI frontend. It builds a fresh command tree per
+// execution and bootstraps a reusable runtime instance from the app package in
+// PersistentPreRunE when no service is injected explicitly.
 package cmd
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -16,65 +16,91 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	// dbPath is the filesystem path to the SQLite database file.
-	// Defaults to ~/.shu/shu.db and can be overridden with --db.
-	dbPath string
-	// logLevel controls the verbosity of structured log output to stderr.
-	// Valid values: "debug", "info", "warn", "error". Defaults to "info".
-	logLevel string
+type serviceGetter func() (*core.Service, error)
 
-	// svc is the core service instance, initialized in PersistentPreRunE and
-	// shared across all subcommands.
-	svc *core.Service
-	// closer holds the cleanup function (store.Close) to be called after the
-	// subcommand finishes.
-	closer func() error
-)
-
-// rootCmd is the top-level Cobra command. It defines global flags and
-// lifecycle hooks that initialize and tear down the database connection.
-var rootCmd = &cobra.Command{
-	Use:   "shu",
-	Short: "RSS Aggregator CLI",
-	Long:  "shu collects RSS feeds and stores entries in SQLite.",
-	// PersistentPreRunE runs before every subcommand. It initializes the
-	// logger, opens the SQLite database (creating the directory if needed),
-	// runs migrations, and constructs the core.Service.
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		instance, err := app.Open(app.Config{
-			DBPath:    dbPath,
-			LogLevel:  logLevel,
-			LogOutput: os.Stderr,
-		})
-		if err != nil {
-			return err
-		}
-		closer = instance.Close
-		svc = instance.Service
-		return nil
-	},
-	// PersistentPostRunE runs after every subcommand to close the database.
-	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
-		if closer != nil {
-			return closer()
-		}
-		return nil
-	},
-}
-
-func init() {
+func newRootCmd(injected *core.Service) *cobra.Command {
 	home, _ := os.UserHomeDir()
 	defaultDB := filepath.Join(home, ".shu", "shu.db")
 
+	var dbPath string
+	var logLevel string
+	var instance *app.Instance
+
+	getService := func() (*core.Service, error) {
+		if injected != nil {
+			return injected, nil
+		}
+		if instance != nil && instance.Service != nil {
+			return instance.Service, nil
+		}
+		return nil, errors.New("service not initialized")
+	}
+
+	rootCmd := &cobra.Command{
+		Use:   "shu",
+		Short: "RSS Aggregator CLI",
+		Long:  "shu collects RSS feeds and stores entries in SQLite.",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if injected != nil {
+				return nil
+			}
+
+			var err error
+			instance, err = app.Open(app.Config{
+				DBPath:    dbPath,
+				LogLevel:  logLevel,
+				LogOutput: os.Stderr,
+			})
+			return err
+		},
+		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+			if injected != nil || instance == nil {
+				return nil
+			}
+
+			err := instance.Close()
+			instance = nil
+			return err
+		},
+	}
+
 	rootCmd.PersistentFlags().StringVar(&dbPath, "db", defaultDB, "path to SQLite database")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level (debug, info, warn, error)")
+
+	rootCmd.AddCommand(
+		newAddCmd(getService),
+		newCleanupCmd(getService),
+		newDiscoverCmd(getService),
+		newDisableCmd(getService),
+		newDuplicatesCmd(getService),
+		newEnableCmd(getService),
+		newEntriesCmd(getService),
+		newExportCmd(getService),
+		newFetchCmd(getService),
+		newImportCmd(getService),
+		newListCmd(getService),
+		newOpenCmd(getService),
+		newReadCmd(getService),
+		newRemoveCmd(getService),
+		newRunCmd(getService),
+		newSearchCmd(getService),
+		newStarCmd(getService),
+		newStatsCmd(getService),
+		newTagCmd(getService),
+		newTagsCmd(getService),
+		newUnstarCmd(getService),
+		newUnreadCmd(getService),
+		newUntagCmd(getService),
+		newUpdateCmd(getService),
+	)
+
+	return rootCmd
 }
 
 // Execute runs the root command and exits with code 1 on error.
 // This is the single entry point called from main().
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
+	if err := newRootCmd(nil).Execute(); err != nil {
 		os.Exit(1)
 	}
 }

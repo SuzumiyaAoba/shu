@@ -2,14 +2,14 @@ package cmd
 
 import (
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/SuzumiyaAoba/shu/store"
 	"github.com/SuzumiyaAoba/shu/core"
-	"log/slog"
+	"github.com/SuzumiyaAoba/shu/store"
 )
 
 func TestDiscoverCmd(t *testing.T) {
@@ -30,16 +30,7 @@ func TestDiscoverCmd(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	service := core.New(s, logger)
 	service.SetHTTPClient(ts.Client())
-	svc = service
-
-	origPre := rootCmd.PersistentPreRunE
-	origPost := rootCmd.PersistentPostRunE
-	rootCmd.PersistentPreRunE = nil
-	rootCmd.PersistentPostRunE = nil
-	t.Cleanup(func() {
-		rootCmd.PersistentPreRunE = origPre
-		rootCmd.PersistentPostRunE = origPost
-	})
+	setTestService(t, service)
 
 	out, err := executeCommand("discover", ts.URL)
 	if err != nil {
@@ -67,16 +58,7 @@ func TestDiscoverCmdJSON(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	service := core.New(s, logger)
 	service.SetHTTPClient(ts.Client())
-	svc = service
-
-	origPre := rootCmd.PersistentPreRunE
-	origPost := rootCmd.PersistentPostRunE
-	rootCmd.PersistentPreRunE = nil
-	rootCmd.PersistentPostRunE = nil
-	t.Cleanup(func() {
-		rootCmd.PersistentPreRunE = origPre
-		rootCmd.PersistentPostRunE = origPost
-	})
+	setTestService(t, service)
 
 	out, err := executeCommand("discover", ts.URL, "--json")
 	if err != nil {
@@ -104,16 +86,7 @@ func TestDiscoverCmdYAML(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	service := core.New(s, logger)
 	service.SetHTTPClient(ts.Client())
-	svc = service
-
-	origPre := rootCmd.PersistentPreRunE
-	origPost := rootCmd.PersistentPostRunE
-	rootCmd.PersistentPreRunE = nil
-	rootCmd.PersistentPostRunE = nil
-	t.Cleanup(func() {
-		rootCmd.PersistentPreRunE = origPre
-		rootCmd.PersistentPostRunE = origPost
-	})
+	setTestService(t, service)
 
 	out, err := executeCommand("discover", ts.URL, "--yaml")
 	if err != nil {

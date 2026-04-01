@@ -7,19 +7,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/SuzumiyaAoba/shu/core"
 	"github.com/SuzumiyaAoba/shu/store"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
+var testService *core.Service
+
 // setupTest creates an in-memory Service backed by a real SQLite store and a
-// local httptest server serving testRSSFeed. It injects the service into the
-// package-level svc variable used by all subcommands, disables the root
-// command's PersistentPreRunE/PostRunE hooks (which would overwrite svc with a
-// file-backed store), and returns the test server URL.
+// local httptest server serving testRSSFeed, then registers that service for
+// executeCommand.
 func setupTest(t *testing.T) string {
 	t.Helper()
 
@@ -38,21 +35,17 @@ func setupTest(t *testing.T) string {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	service := core.New(s, logger)
 	service.SetHTTPClient(ts.Client())
-
-	svc = service
-
-	// Disable the lifecycle hooks so PersistentPreRunE doesn't overwrite svc
-	// with a file-backed store and PersistentPostRunE doesn't close it.
-	origPre := rootCmd.PersistentPreRunE
-	origPost := rootCmd.PersistentPostRunE
-	rootCmd.PersistentPreRunE = nil
-	rootCmd.PersistentPostRunE = nil
-	t.Cleanup(func() {
-		rootCmd.PersistentPreRunE = origPre
-		rootCmd.PersistentPostRunE = origPost
-	})
+	setTestService(t, service)
 
 	return ts.URL
+}
+
+func setTestService(t *testing.T, service *core.Service) {
+	t.Helper()
+	testService = service
+	t.Cleanup(func() {
+		testService = nil
+	})
 }
 
 // executeCommand runs a Cobra command with the given arguments and returns the
@@ -60,61 +53,13 @@ func setupTest(t *testing.T) string {
 // buffer to capture output.
 func executeCommand(args ...string) (string, error) {
 	buf := new(bytes.Buffer)
+	rootCmd := newRootCmd(testService)
 	rootCmd.SetOut(buf)
 	rootCmd.SetErr(buf)
 	rootCmd.SetArgs(args)
 
-	// Reset flag values that persist between test runs due to package-level vars.
-	resetFlags()
-
 	err := rootCmd.Execute()
 	return buf.String(), err
-}
-
-// clearFlags recursively resets flag.Changed = false for a command and its subcommands
-func clearFlags(cmd *cobra.Command) {
-	cmd.Flags().VisitAll(func(f *pflag.Flag) {
-		f.Changed = false
-	})
-	for _, sub := range cmd.Commands() {
-		clearFlags(sub)
-	}
-}
-
-// resetFlags resets subcommand flag values to their defaults so that flag state
-// from one test does not leak into the next.
-func resetFlags() {
-	clearFlags(rootCmd)
-	addTitle = ""
-	addJSON = false
-	addYAML = false
-	listJSON = false
-	listYAML = false
-	fetchFeedID = 0
-	fetchJSON = false
-	fetchYAML = false
-	entriesFeedID = 0
-	entriesLimit = 20
-	entriesJSON = false
-	entriesYAML = false
-	entriesUnread = false
-	entriesStarred = false
-	entriesTag = ""
-	entriesFormat = ""
-	statsJSON = false
-	statsYAML = false
-	cleanupOlderThan = 90 * 24 * time.Hour
-	updateTitle = ""
-	updateURL = ""
-	searchLimit = 20
-	searchJSON = false
-	searchYAML = false
-	discoverJSON = false
-	discoverYAML = false
-	duplicatesJSON = false
-	duplicatesYAML = false
-	tagsJSON = false
-	tagsYAML = false
 }
 
 const testRSSFeed = `<?xml version="1.0" encoding="UTF-8"?>

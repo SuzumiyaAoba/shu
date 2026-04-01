@@ -9,10 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// runInterval holds the --interval flag value controlling how frequently feeds
-// are fetched in daemon mode. Defaults to 30 minutes.
-var runInterval time.Duration
-
 // runCmd implements "shu run".
 //
 // It starts a long-running daemon that periodically fetches all registered
@@ -28,45 +24,49 @@ var runInterval time.Duration
 //	shu run                  # Fetch every 30 minutes (default)
 //	shu run --interval 5m   # Fetch every 5 minutes
 //	shu run --interval 1h   # Fetch every hour
-var runCmd = &cobra.Command{
-	Use:   "run",
-	Short: "Run daemon mode: fetch all feeds on an interval",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
-		defer stop()
+func newRunCmd(getService serviceGetter) *cobra.Command {
+	var runInterval time.Duration
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Starting daemon (interval: %s). Press Ctrl+C to stop.\n", runInterval)
+	runCmd := &cobra.Command{
+		Use:   "run",
+		Short: "Run daemon mode: fetch all feeds on an interval",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := getService()
+			if err != nil {
+				return err
+			}
+			ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
+			defer stop()
 
-		// Fetch immediately on start so the user doesn't have to wait for
-		// the first tick.
-		count, err := svc.FetchAll(ctx)
-		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "fetch error: %v\n", err)
-		} else {
-			fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count)
-		}
+			fmt.Fprintf(cmd.OutOrStdout(), "Starting daemon (interval: %s). Press Ctrl+C to stop.\n", runInterval)
 
-		ticker := time.NewTicker(runInterval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				fmt.Fprintln(cmd.OutOrStdout(), "Shutting down...")
-				return nil
-			case <-ticker.C:
-				count, err := svc.FetchAll(ctx)
-				if err != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), "fetch error: %v\n", err)
-					continue
-				}
+			count, err := svc.FetchAll(ctx)
+			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "fetch error: %v\n", err)
+			} else {
 				fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count)
 			}
-		}
-	},
-}
 
-func init() {
+			ticker := time.NewTicker(runInterval)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ctx.Done():
+					fmt.Fprintln(cmd.OutOrStdout(), "Shutting down...")
+					return nil
+				case <-ticker.C:
+					count, err := svc.FetchAll(ctx)
+					if err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "fetch error: %v\n", err)
+						continue
+					}
+					fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count)
+				}
+			}
+		},
+	}
+
 	runCmd.Flags().DurationVar(&runInterval, "interval", 30*time.Minute, "fetch interval (e.g. 5m, 1h)")
-	rootCmd.AddCommand(runCmd)
+	return runCmd
 }
