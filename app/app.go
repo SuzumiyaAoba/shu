@@ -39,6 +39,10 @@ type Instance struct {
 
 // Open creates a reusable application instance from the given config.
 func Open(cfg Config) (*Instance, error) {
+	if err := validateConfig(cfg); err != nil {
+		return nil, err
+	}
+
 	logger, err := buildLogger(cfg)
 	if err != nil {
 		return nil, err
@@ -61,6 +65,19 @@ func Open(cfg Config) (*Instance, error) {
 		Logger:  logger,
 		Close:   closeFn,
 	}, nil
+}
+
+func validateConfig(cfg Config) error {
+	if cfg.Store != nil && cfg.OpenStore != nil {
+		return fmt.Errorf("config conflict: Store and OpenStore are mutually exclusive")
+	}
+	if cfg.Logger != nil && (cfg.LogLevel != "" || cfg.LogOutput != nil) {
+		return fmt.Errorf("config conflict: Logger cannot be combined with LogLevel or LogOutput")
+	}
+	if cfg.Store == nil && cfg.DBPath == "" {
+		return fmt.Errorf("config error: DBPath is required when Store is not provided")
+	}
+	return nil
 }
 
 func buildLogger(cfg Config) (*slog.Logger, error) {

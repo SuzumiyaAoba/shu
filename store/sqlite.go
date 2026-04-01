@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/SuzumiyaAoba/shu/core"
-	_ "modernc.org/sqlite" // Register the pure-Go SQLite driver.
+	sqlite "modernc.org/sqlite"
 )
+
+const sqliteConstraintUnique = 2067
 
 // migrationsFS embeds all SQL migration files from the migrations directory.
 // Files are named with a numeric prefix (e.g. 001_, 002_) and executed in
@@ -173,6 +175,10 @@ func (s *SQLiteStore) AddFeed(ctx context.Context, feed *core.Feed) error {
 		feed.Description, feed.Language, feed.ImageURL, feed.FeedType,
 	)
 	if err != nil {
+		var sqliteErr *sqlite.Error
+		if errors.As(err, &sqliteErr) && sqliteErr.Code() == sqliteConstraintUnique {
+			return fmt.Errorf("feed %s: %w", feed.URL, core.ErrFeedAlreadyExists)
+		}
 		return fmt.Errorf("insert feed: %w", err)
 	}
 	id, err := result.LastInsertId()

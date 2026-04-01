@@ -61,6 +61,9 @@ func TestAddFeedDuplicateURL(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for duplicate URL")
 	}
+	if !errors.Is(err, core.ErrFeedAlreadyExists) {
+		t.Fatalf("expected ErrFeedAlreadyExists, got %v", err)
+	}
 }
 
 func TestGetFeed(t *testing.T) {

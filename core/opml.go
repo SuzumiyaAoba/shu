@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -109,8 +110,8 @@ func feedToOutline(f *Feed) OPMLOutline {
 }
 
 // ImportOPML reads an OPML document and adds all feeds found in it.
-// Nested outlines (categories) are imported as tags. Returns the number
-// of feeds successfully added (duplicates are skipped).
+// Nested outlines (categories) are imported as tags. Duplicate feeds are
+// skipped; other add failures are returned to the caller.
 func (s *Service) ImportOPML(ctx context.Context, r io.Reader) (int, error) {
 	var opml OPML
 	if err := xml.NewDecoder(r).Decode(&opml); err != nil {
@@ -158,8 +159,11 @@ func (s *Service) importOutline(ctx context.Context, outline OPMLOutline, parent
 
 	feed, err := s.AddFeed(ctx, outline.XMLURL, title)
 	if err != nil {
-		s.logger.Warn("skip OPML feed", "url", outline.XMLURL, "error", err)
-		return 0, nil
+		if errors.Is(err, ErrFeedAlreadyExists) {
+			s.logger.Info("skip duplicate OPML feed", "url", outline.XMLURL)
+			return 0, nil
+		}
+		return 0, fmt.Errorf("add OPML feed %s: %w", outline.XMLURL, err)
 	}
 
 	if parentTag != "" {

@@ -2,11 +2,14 @@ package core_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/SuzumiyaAoba/shu/core"
 )
 
 func TestExportOPML(t *testing.T) {
@@ -147,5 +150,28 @@ func TestImportOPMLDuplicateSkip(t *testing.T) {
 	}
 	if added != 0 {
 		t.Errorf("added = %d, want 0 (duplicate should be skipped)", added)
+	}
+}
+
+func TestImportOPMLReturnsAddFeedError(t *testing.T) {
+	svc := newTestService(t, nil)
+	ctx := context.Background()
+
+	opmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="Broken Feed" type="rss" xmlUrl="https://[invalid-url"/>
+  </body>
+</opml>`
+
+	added, err := svc.ImportOPML(ctx, strings.NewReader(opmlDoc))
+	if err == nil {
+		t.Fatal("expected ImportOPML to return add error")
+	}
+	if added != 0 {
+		t.Fatalf("added = %d, want 0", added)
+	}
+	if errors.Is(err, core.ErrFeedAlreadyExists) {
+		t.Fatalf("expected non-duplicate error, got %v", err)
 	}
 }
