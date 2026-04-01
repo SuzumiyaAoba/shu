@@ -58,6 +58,7 @@ type TagStore interface {
 	AddTag(ctx context.Context, feedID int64, tagName string) error
 	RemoveTag(ctx context.Context, feedID int64, tagName string) error
 	ListTags(ctx context.Context, feedID int64) ([]Tag, error)
+	ListFeedTags(ctx context.Context) (map[int64][]Tag, error)
 	ListAllTags(ctx context.Context) ([]Tag, error)
 	ListFeedsByTag(ctx context.Context, tagName string) ([]*Feed, error)
 }

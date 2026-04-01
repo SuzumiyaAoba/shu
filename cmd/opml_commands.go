@@ -8,14 +8,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func opmlCommands(getService serviceGetter) []*cobra.Command {
+func opmlCommands(getService opmlServiceGetter) []*cobra.Command {
 	return withGroup("opml",
 		newImportCmd(getService),
 		newExportCmd(getService),
 	)
 }
 
-func newImportCmd(getService serviceGetter) *cobra.Command {
+func newImportCmd(getService opmlServiceGetter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "import <file.opml>",
 		Short: "Import feeds from an OPML file",
@@ -41,7 +41,7 @@ func newImportCmd(getService serviceGetter) *cobra.Command {
 	}
 }
 
-func newExportCmd(getService serviceGetter) *cobra.Command {
+func newExportCmd(getService opmlServiceGetter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "export",
 		Short: "Export feeds as OPML",

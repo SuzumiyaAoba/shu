@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func feedCommands(getService serviceGetter) []*cobra.Command {
+func feedCommands(getService feedServiceGetter) []*cobra.Command {
 	return withGroup("feeds",
 		newAddCmd(getService),
 		newListCmd(getService),
@@ -26,7 +26,7 @@ func feedCommands(getService serviceGetter) []*cobra.Command {
 // It fetches the feed at the given URL to validate it, extracts metadata
 // (title, site URL), and persists the feed record. If --title is provided,
 // the user-supplied title is stored instead of the one from the feed document.
-func newAddCmd(getService serviceGetter) *cobra.Command {
+func newAddCmd(getService feedServiceGetter) *cobra.Command {
 	var addTitle string
 	var addJSON bool
 	var addYAML bool
@@ -64,7 +64,7 @@ func newAddCmd(getService serviceGetter) *cobra.Command {
 }
 
 // newListCmd implements "shu list".
-func newListCmd(getService serviceGetter) *cobra.Command {
+func newListCmd(getService feedServiceGetter) *cobra.Command {
 	var listJSON bool
 	var listYAML bool
 
@@ -110,7 +110,7 @@ func newListCmd(getService serviceGetter) *cobra.Command {
 }
 
 // newFetchCmd implements "shu fetch".
-func newFetchCmd(getService serviceGetter) *cobra.Command {
+func newFetchCmd(getService feedServiceGetter) *cobra.Command {
 	var fetchFeedID int64
 	var fetchJSON bool
 	var fetchYAML bool
@@ -163,7 +163,7 @@ func newFetchCmd(getService serviceGetter) *cobra.Command {
 	return fetchCmd
 }
 
-func newDiscoverCmd(getService serviceGetter) *cobra.Command {
+func newDiscoverCmd(getService feedServiceGetter) *cobra.Command {
 	var discoverJSON bool
 	var discoverYAML bool
 
@@ -205,7 +205,7 @@ func newDiscoverCmd(getService serviceGetter) *cobra.Command {
 	return discoverCmd
 }
 
-func newUpdateCmd(getService serviceGetter) *cobra.Command {
+func newUpdateCmd(getService feedServiceGetter) *cobra.Command {
 	var updateTitle string
 	var updateURL string
 
@@ -245,7 +245,7 @@ func newUpdateCmd(getService serviceGetter) *cobra.Command {
 }
 
 // newRemoveCmd implements "shu remove <id>".
-func newRemoveCmd(getService serviceGetter) *cobra.Command {
+func newRemoveCmd(getService feedServiceGetter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "remove <id>",
 		Short: "Remove a feed and its entries",
@@ -268,7 +268,7 @@ func newRemoveCmd(getService serviceGetter) *cobra.Command {
 	}
 }
 
-func newEnableCmd(getService serviceGetter) *cobra.Command {
+func newEnableCmd(getService feedServiceGetter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "enable <feed-id>",
 		Short: "Re-enable a disabled feed",
@@ -291,7 +291,7 @@ func newEnableCmd(getService serviceGetter) *cobra.Command {
 	}
 }
 
-func newDisableCmd(getService serviceGetter) *cobra.Command {
+func newDisableCmd(getService feedServiceGetter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "disable <feed-id>",
 		Short: "Disable a feed (skip during fetch)",

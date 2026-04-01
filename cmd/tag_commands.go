@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func tagCommands(getService serviceGetter) []*cobra.Command {
+func tagCommands(getService tagServiceGetter) []*cobra.Command {
 	return withGroup("tags",
 		newTagCmd(getService),
 		newUntagCmd(getService),
@@ -15,7 +15,7 @@ func tagCommands(getService serviceGetter) []*cobra.Command {
 	)
 }
 
-func newTagCmd(getService serviceGetter) *cobra.Command {
+func newTagCmd(getService tagServiceGetter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "tag <feed-id> <tag-name>",
 		Short: "Add a tag to a feed",
@@ -38,7 +38,7 @@ func newTagCmd(getService serviceGetter) *cobra.Command {
 	}
 }
 
-func newUntagCmd(getService serviceGetter) *cobra.Command {
+func newUntagCmd(getService tagServiceGetter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "untag <feed-id> <tag-name>",
 		Short: "Remove a tag from a feed",
@@ -61,7 +61,7 @@ func newUntagCmd(getService serviceGetter) *cobra.Command {
 	}
 }
 
-func newTagsCmd(getService serviceGetter) *cobra.Command {
+func newTagsCmd(getService tagServiceGetter) *cobra.Command {
 	var tagsJSON bool
 	var tagsYAML bool
 

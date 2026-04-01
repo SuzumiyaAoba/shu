@@ -655,6 +655,31 @@ func (s *SQLiteStore) ListAllTags(ctx context.Context) ([]core.Tag, error) {
 	return tags, rows.Err()
 }
 
+// ListFeedTags returns every feed-tag association grouped by feed ID.
+func (s *SQLiteStore) ListFeedTags(ctx context.Context) (map[int64][]core.Tag, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT ft.feed_id, t.id, t.name
+		FROM feed_tags ft
+		JOIN tags t ON t.id = ft.tag_id
+		ORDER BY ft.feed_id, t.name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list feed tags: %w", err)
+	}
+	defer rows.Close()
+
+	feedTags := make(map[int64][]core.Tag)
+	for rows.Next() {
+		var feedID int64
+		var tag core.Tag
+		if err := rows.Scan(&feedID, &tag.ID, &tag.Name); err != nil {
+			return nil, fmt.Errorf("scan feed tag: %w", err)
+		}
+		feedTags[feedID] = append(feedTags[feedID], tag)
+	}
+	return feedTags, rows.Err()
+}
+
 // ListFeedsByTag returns all feeds associated with the given tag name.
 func (s *SQLiteStore) ListFeedsByTag(ctx context.Context, tagName string) ([]*core.Feed, error) {
 	rows, err := s.db.QueryContext(ctx,

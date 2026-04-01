@@ -16,8 +16,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type serviceGetter func() (*core.Service, error)
-
 func newRootCmd(injected *core.Service) *cobra.Command {
 	home, _ := os.UserHomeDir()
 	defaultDB := filepath.Join(home, ".shu", "shu.db")
@@ -34,6 +32,22 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 			return instance.Service, nil
 		}
 		return nil, errors.New("service not initialized")
+	}
+
+	getFeedService := func() (feedService, error) {
+		return getService()
+	}
+	getEntryService := func() (entryService, error) {
+		return getService()
+	}
+	getTagService := func() (tagService, error) {
+		return getService()
+	}
+	getMaintenanceService := func() (maintenanceService, error) {
+		return getService()
+	}
+	getOPMLService := func() (opmlService, error) {
+		return getService()
 	}
 
 	rootCmd := &cobra.Command{
@@ -75,11 +89,11 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 	rootCmd.PersistentFlags().StringVar(&dbPath, "db", defaultDB, "path to SQLite database")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level (debug, info, warn, error)")
 
-	rootCmd.AddCommand(feedCommands(getService)...)
-	rootCmd.AddCommand(entryCommands(getService)...)
-	rootCmd.AddCommand(tagCommands(getService)...)
-	rootCmd.AddCommand(maintenanceCommands(getService)...)
-	rootCmd.AddCommand(opmlCommands(getService)...)
+	rootCmd.AddCommand(feedCommands(getFeedService)...)
+	rootCmd.AddCommand(entryCommands(getEntryService)...)
+	rootCmd.AddCommand(tagCommands(getTagService)...)
+	rootCmd.AddCommand(maintenanceCommands(getMaintenanceService)...)
+	rootCmd.AddCommand(opmlCommands(getOPMLService)...)
 
 	return rootCmd
 }

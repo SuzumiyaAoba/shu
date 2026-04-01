@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"sort"
 	"time"
 )
 
@@ -44,25 +45,29 @@ func (s *Service) ExportOPML(ctx context.Context) (*OPML, error) {
 		return nil, fmt.Errorf("list feeds: %w", err)
 	}
 
-	tags, err := s.store.ListAllTags(ctx)
+	feedTags, err := s.store.ListFeedTags(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list tags: %w", err)
+		return nil, fmt.Errorf("list feed tags: %w", err)
 	}
 
-	// Build tag→feeds mapping.
 	taggedFeeds := make(map[string][]*Feed)
-	feedHasTag := make(map[int64]bool)
+	tagNames := make([]string, 0)
+	seenTags := make(map[string]bool)
 
-	for _, tag := range tags {
-		tagged, err := s.store.ListFeedsByTag(ctx, tag.Name)
-		if err != nil {
-			return nil, fmt.Errorf("list feeds by tag %s: %w", tag.Name, err)
+	for _, f := range feeds {
+		tags := feedTags[f.ID]
+		if len(tags) == 0 {
+			continue
 		}
-		taggedFeeds[tag.Name] = tagged
-		for _, f := range tagged {
-			feedHasTag[f.ID] = true
+		for _, tag := range tags {
+			taggedFeeds[tag.Name] = append(taggedFeeds[tag.Name], f)
+			if !seenTags[tag.Name] {
+				tagNames = append(tagNames, tag.Name)
+				seenTags[tag.Name] = true
+			}
 		}
 	}
+	sort.Strings(tagNames)
 
 	opml := &OPML{
 		Version: "2.0",
@@ -74,15 +79,15 @@ func (s *Service) ExportOPML(ctx context.Context) (*OPML, error) {
 
 	// Untagged feeds at top level.
 	for _, f := range feeds {
-		if !feedHasTag[f.ID] {
+		if len(feedTags[f.ID]) == 0 {
 			opml.Body.Outlines = append(opml.Body.Outlines, feedToOutline(f))
 		}
 	}
 
 	// Tagged feeds grouped under category outlines.
-	for _, tag := range tags {
-		group := OPMLOutline{Text: tag.Name, Title: tag.Name}
-		for _, f := range taggedFeeds[tag.Name] {
+	for _, tagName := range tagNames {
+		group := OPMLOutline{Text: tagName, Title: tagName}
+		for _, f := range taggedFeeds[tagName] {
 			group.Outlines = append(group.Outlines, feedToOutline(f))
 		}
 		if len(group.Outlines) > 0 {

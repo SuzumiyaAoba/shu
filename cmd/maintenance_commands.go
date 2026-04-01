@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func maintenanceCommands(getService serviceGetter) []*cobra.Command {
+func maintenanceCommands(getService maintenanceServiceGetter) []*cobra.Command {
 	return withGroup("maintenance",
 		newStatsCmd(getService),
 		newCleanupCmd(getService),
@@ -18,7 +18,7 @@ func maintenanceCommands(getService serviceGetter) []*cobra.Command {
 	)
 }
 
-func newStatsCmd(getService serviceGetter) *cobra.Command {
+func newStatsCmd(getService maintenanceServiceGetter) *cobra.Command {
 	var statsJSON bool
 	var statsYAML bool
 
@@ -64,7 +64,7 @@ func newStatsCmd(getService serviceGetter) *cobra.Command {
 	return statsCmd
 }
 
-func newCleanupCmd(getService serviceGetter) *cobra.Command {
+func newCleanupCmd(getService maintenanceServiceGetter) *cobra.Command {
 	var cleanupOlderThan time.Duration
 
 	cleanupCmd := &cobra.Command{
@@ -88,7 +88,7 @@ func newCleanupCmd(getService serviceGetter) *cobra.Command {
 	return cleanupCmd
 }
 
-func newRunCmd(getService serviceGetter) *cobra.Command {
+func newRunCmd(getService maintenanceServiceGetter) *cobra.Command {
 	var runInterval time.Duration
 
 	runCmd := &cobra.Command{

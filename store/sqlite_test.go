@@ -568,6 +568,35 @@ func TestTags(t *testing.T) {
 	}
 }
 
+func TestListFeedTags(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed1 := &core.Feed{URL: "https://a.com/feed", Title: "A"}
+	feed2 := &core.Feed{URL: "https://b.com/feed", Title: "B"}
+	_ = s.AddFeed(ctx, feed1)
+	_ = s.AddFeed(ctx, feed2)
+
+	_ = s.AddTag(ctx, feed1.ID, "tech")
+	_ = s.AddTag(ctx, feed1.ID, "go")
+	_ = s.AddTag(ctx, feed2.ID, "news")
+
+	feedTags, err := s.ListFeedTags(ctx)
+	if err != nil {
+		t.Fatalf("ListFeedTags failed: %v", err)
+	}
+
+	if len(feedTags[feed1.ID]) != 2 {
+		t.Fatalf("got %d tags for feed1, want 2", len(feedTags[feed1.ID]))
+	}
+	if feedTags[feed1.ID][0].Name != "go" || feedTags[feed1.ID][1].Name != "tech" {
+		t.Fatalf("unexpected tag order for feed1: %+v", feedTags[feed1.ID])
+	}
+	if len(feedTags[feed2.ID]) != 1 || feedTags[feed2.ID][0].Name != "news" {
+		t.Fatalf("unexpected tags for feed2: %+v", feedTags[feed2.ID])
+	}
+}
+
 func TestListEntriesFilterByTag(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

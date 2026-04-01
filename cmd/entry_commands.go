@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func entryCommands(getService serviceGetter) []*cobra.Command {
+func entryCommands(getService entryServiceGetter) []*cobra.Command {
 	return withGroup("entries",
 		newEntriesCmd(getService),
 		newReadCmd(getService),
@@ -24,7 +24,7 @@ func entryCommands(getService serviceGetter) []*cobra.Command {
 	)
 }
 
-func newEntriesCmd(getService serviceGetter) *cobra.Command {
+func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 	var entriesFeedID int64
 	var entriesLimit int
 	var entriesJSON bool
@@ -122,7 +122,7 @@ func renderEntriesMarkdown(cmd *cobra.Command, entries []*core.Entry) error {
 	return nil
 }
 
-func newReadCmd(getService serviceGetter) *cobra.Command {
+func newReadCmd(getService entryServiceGetter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "read <entry-id> [entry-id...]",
 		Short: "Mark entries as read",
@@ -152,7 +152,7 @@ func newReadCmd(getService serviceGetter) *cobra.Command {
 	}
 }
 
-func newUnreadCmd(getService serviceGetter) *cobra.Command {
+func newUnreadCmd(getService entryServiceGetter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "unread <entry-id> [entry-id...]",
 		Short: "Mark entries as unread",
@@ -182,7 +182,7 @@ func newUnreadCmd(getService serviceGetter) *cobra.Command {
 	}
 }
 
-func newStarCmd(getService serviceGetter) *cobra.Command {
+func newStarCmd(getService entryServiceGetter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "star <entry-id> [entry-id...]",
 		Short: "Bookmark entries",
@@ -212,7 +212,7 @@ func newStarCmd(getService serviceGetter) *cobra.Command {
 	}
 }
 
-func newUnstarCmd(getService serviceGetter) *cobra.Command {
+func newUnstarCmd(getService entryServiceGetter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "unstar <entry-id> [entry-id...]",
 		Short: "Remove bookmarks from entries",
@@ -242,7 +242,7 @@ func newUnstarCmd(getService serviceGetter) *cobra.Command {
 	}
 }
 
-func newOpenCmd(getService serviceGetter) *cobra.Command {
+func newOpenCmd(getService entryServiceGetter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "open <entry-id>",
 		Short: "Open an entry in the default browser",
@@ -288,7 +288,7 @@ func openBrowser(url string) error {
 	}
 }
 
-func newSearchCmd(getService serviceGetter) *cobra.Command {
+func newSearchCmd(getService entryServiceGetter) *cobra.Command {
 	var searchLimit int
 	var searchJSON bool
 	var searchYAML bool
@@ -332,7 +332,7 @@ func newSearchCmd(getService serviceGetter) *cobra.Command {
 	return searchCmd
 }
 
-func newDuplicatesCmd(getService serviceGetter) *cobra.Command {
+func newDuplicatesCmd(getService entryServiceGetter) *cobra.Command {
 	var duplicatesJSON bool
 	var duplicatesYAML bool
 
