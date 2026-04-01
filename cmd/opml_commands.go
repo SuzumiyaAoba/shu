@@ -8,6 +8,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func opmlCommands(getService serviceGetter) []*cobra.Command {
+	return []*cobra.Command{
+		newImportCmd(getService),
+		newExportCmd(getService),
+	}
+}
+
 func newImportCmd(getService serviceGetter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "import <file.opml>",

@@ -7,6 +7,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func tagCommands(getService serviceGetter) []*cobra.Command {
+	return []*cobra.Command{
+		newTagCmd(getService),
+		newUntagCmd(getService),
+		newTagsCmd(getService),
+	}
+}
+
 func newTagCmd(getService serviceGetter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "tag <feed-id> <tag-name>",

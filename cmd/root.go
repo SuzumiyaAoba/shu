@@ -67,32 +67,11 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 	rootCmd.PersistentFlags().StringVar(&dbPath, "db", defaultDB, "path to SQLite database")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level (debug, info, warn, error)")
 
-	rootCmd.AddCommand(
-		newAddCmd(getService),
-		newCleanupCmd(getService),
-		newDiscoverCmd(getService),
-		newDisableCmd(getService),
-		newDuplicatesCmd(getService),
-		newEnableCmd(getService),
-		newEntriesCmd(getService),
-		newExportCmd(getService),
-		newFetchCmd(getService),
-		newImportCmd(getService),
-		newListCmd(getService),
-		newOpenCmd(getService),
-		newReadCmd(getService),
-		newRemoveCmd(getService),
-		newRunCmd(getService),
-		newSearchCmd(getService),
-		newStarCmd(getService),
-		newStatsCmd(getService),
-		newTagCmd(getService),
-		newTagsCmd(getService),
-		newUnstarCmd(getService),
-		newUnreadCmd(getService),
-		newUntagCmd(getService),
-		newUpdateCmd(getService),
-	)
+	rootCmd.AddCommand(feedCommands(getService)...)
+	rootCmd.AddCommand(entryCommands(getService)...)
+	rootCmd.AddCommand(tagCommands(getService)...)
+	rootCmd.AddCommand(maintenanceCommands(getService)...)
+	rootCmd.AddCommand(opmlCommands(getService)...)
 
 	return rootCmd
 }

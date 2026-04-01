@@ -8,11 +8,15 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mmcdole/gofeed"
 	"github.com/mmcdole/gofeed/atom"
 )
+
+const fetchWorkerCount = 10
 
 // FetchFeed downloads and parses the RSS/Atom feed identified by feedID, then
 // stores any new entries that are not already in the database.
@@ -67,11 +71,22 @@ func (s *Service) fetchFeed(ctx context.Context, feed *Feed, notifier *fetchNoti
 	// Fetch the feed body with conditional GET support.
 	body, headers, err := s.fetchBodyConditional(ctx, feed.URL, feed.ETag, feed.LastModified)
 	if err != nil {
+		fetchErr := fmt.Errorf("fetch feed %s: %w", feed.URL, err)
+		if ctx.Err() != nil {
+			notifier.emit(FetchEvent{
+				Type:      FetchEventCompleted,
+				FeedID:    feed.ID,
+				FeedTitle: feed.Title,
+				FeedURL:   feed.URL,
+				Err:       fetchErr,
+			})
+			return nil, fetchErr
+		}
+
 		// Record the error for health monitoring.
 		if recErr := s.store.RecordFeedError(ctx, feed.ID, err.Error()); recErr != nil {
 			s.logger.Warn("failed to record feed error", "id", feed.ID, "error", recErr)
 		}
-		fetchErr := fmt.Errorf("fetch feed %s: %w", feed.URL, err)
 		notifier.emit(FetchEvent{
 			Type:      FetchEventCompleted,
 			FeedID:    feed.ID,
@@ -474,34 +489,59 @@ func (s *Service) FetchAllWithObserver(ctx context.Context, observer FetchObserv
 		return 0, nil
 	}
 
-	type result struct {
-		count int
+	jobs := make(chan *Feed)
+	workers := min(fetchWorkerCount, len(toFetch))
+	var total atomic.Int64
+	var wg sync.WaitGroup
+
+	worker := func() {
+		defer wg.Done()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case feed, ok := <-jobs:
+				if !ok {
+					return
+				}
+
+				entries, err := s.fetchFeed(ctx, feed, notifier)
+				if err != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					s.logger.Error("failed to fetch feed", "id", feed.ID, "url", feed.URL, "error", err)
+					continue
+				}
+				total.Add(int64(len(entries)))
+			}
+		}
 	}
 
-	results := make(chan result, len(toFetch))
-	sem := make(chan struct{}, 10) // concurrency limit
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go worker()
+	}
 
 	for _, feed := range toFetch {
-		sem <- struct{}{}
-		go func(f *Feed) {
-			defer func() { <-sem }()
-			entries, err := s.fetchFeed(ctx, f, notifier)
-			if err != nil {
-				s.logger.Error("failed to fetch feed", "id", f.ID, "url", f.URL, "error", err)
-				results <- result{0}
-				return
-			}
-			results <- result{len(entries)}
-		}(feed)
+		select {
+		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
+			return int(total.Load()), ctx.Err()
+		case jobs <- feed:
+		}
 	}
 
-	total := 0
-	for range toFetch {
-		r := <-results
-		total += r.count
+	close(jobs)
+	wg.Wait()
+
+	if err := ctx.Err(); err != nil {
+		return int(total.Load()), err
 	}
 
-	return total, nil
+	return int(total.Load()), nil
 }
 
 // GetEntry retrieves a single entry by its primary key.

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/SuzumiyaAoba/shu/core"
@@ -133,6 +134,73 @@ func TestFetchAllWithObserver(t *testing.T) {
 	}
 	if completed[feed1.ID] != 2 || completed[feed2.ID] != 2 {
 		t.Fatalf("expected completed events with 2 entries each, got %+v", events)
+	}
+}
+
+func TestFetchAllCanceledDoesNotRecordFeedError(t *testing.T) {
+	started := make(chan struct{}, 1)
+	var requestCount atomic.Int32
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requestCount.Add(1) == 1 {
+			w.Header().Set("Content-Type", "application/rss+xml")
+			io.WriteString(w, testRSSFeed)
+			return
+		}
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-r.Context().Done()
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	svc := newTestService(t, nil)
+	svc.SetHTTPClient(ts.Client())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
+
+	resultCh := make(chan struct {
+		count int
+		err   error
+	}, 1)
+	go func() {
+		count, err := svc.FetchAll(ctx)
+		resultCh <- struct {
+			count int
+			err   error
+		}{count: count, err: err}
+	}()
+
+	<-started
+	cancel()
+
+	result := <-resultCh
+	if !errors.Is(result.err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", result.err)
+	}
+	if result.count != 0 {
+		t.Fatalf("got count %d, want 0", result.count)
+	}
+
+	gotFeed, err := svc.ListFeeds(context.Background())
+	if err != nil {
+		t.Fatalf("ListFeeds failed: %v", err)
+	}
+	if len(gotFeed) != 1 {
+		t.Fatalf("got %d feeds, want 1", len(gotFeed))
+	}
+	if gotFeed[0].ID != feed.ID {
+		t.Fatalf("unexpected feed ID: got %d want %d", gotFeed[0].ID, feed.ID)
+	}
+	if gotFeed[0].ErrorCount != 0 {
+		t.Fatalf("ErrorCount = %d, want 0", gotFeed[0].ErrorCount)
+	}
+	if gotFeed[0].LastError != "" {
+		t.Fatalf("LastError = %q, want empty", gotFeed[0].LastError)
 	}
 }
 
