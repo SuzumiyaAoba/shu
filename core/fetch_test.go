@@ -2,6 +2,7 @@ package core_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -416,5 +417,8 @@ func TestFetchFeedNotFound(t *testing.T) {
 	_, err := svc.FetchFeed(ctx, 999)
 	if err == nil {
 		t.Error("expected error for non-existent feed")
+	}
+	if !errors.Is(err, core.ErrFeedNotFound) {
+		t.Fatalf("expected ErrFeedNotFound, got %v", err)
 	}
 }

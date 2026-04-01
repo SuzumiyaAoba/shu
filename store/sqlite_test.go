@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -108,6 +109,9 @@ func TestGetFeedNotFound(t *testing.T) {
 	_, err := s.GetFeed(ctx, 999)
 	if err == nil {
 		t.Error("expected error for non-existent feed")
+	}
+	if !errors.Is(err, core.ErrFeedNotFound) {
+		t.Fatalf("expected ErrFeedNotFound, got %v", err)
 	}
 }
 
@@ -843,6 +847,19 @@ func TestGetEntry(t *testing.T) {
 	}
 	if got.Title != "Entry 1" {
 		t.Errorf("Title = %q, want %q", got.Title, "Entry 1")
+	}
+}
+
+func TestGetEntryNotFound(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	_, err := s.GetEntry(ctx, 999)
+	if err == nil {
+		t.Fatal("expected error for non-existent entry")
+	}
+	if !errors.Is(err, core.ErrEntryNotFound) {
+		t.Fatalf("expected ErrEntryNotFound, got %v", err)
 	}
 }
 

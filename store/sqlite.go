@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -189,7 +190,14 @@ func (s *SQLiteStore) GetFeed(ctx context.Context, id int64) (*core.Feed, error)
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+feedColumns+` FROM feeds WHERE id = ?`, id,
 	)
-	return scanFeed(row)
+	feed, err := scanFeed(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("feed %d: %w", id, core.ErrFeedNotFound)
+		}
+		return nil, err
+	}
+	return feed, nil
 }
 
 // ListFeeds returns all registered feeds ordered by ascending ID.
@@ -294,7 +302,14 @@ func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (in
 // GetEntry retrieves a single entry by its primary key.
 func (s *SQLiteStore) GetEntry(ctx context.Context, id int64) (*core.Entry, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT `+entryColumns+` FROM entries WHERE id = ?`, id)
-	return scanEntry(row)
+	entry, err := scanEntry(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("entry %d: %w", id, core.ErrEntryNotFound)
+		}
+		return nil, err
+	}
+	return entry, nil
 }
 
 // Results are always ordered by fetched_at DESC (newest first).

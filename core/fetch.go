@@ -14,45 +14,6 @@ import (
 	"github.com/mmcdole/gofeed/atom"
 )
 
-// person is the JSON-serializable representation of a feed author or contributor.
-type person struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	URI   string `json:"uri"`
-}
-
-// link is the JSON-serializable representation of a feed link with full Atom metadata.
-type link struct {
-	Href     string `json:"href"`
-	Rel      string `json:"rel"`
-	Type     string `json:"type"`
-	Hreflang string `json:"hreflang"`
-	Title    string `json:"title"`
-	Length   string `json:"length"`
-}
-
-// category is the JSON-serializable representation of a feed category
-// with full Atom metadata (term, scheme, label).
-type category struct {
-	Term   string `json:"term"`
-	Scheme string `json:"scheme"`
-	Label  string `json:"label"`
-}
-
-// enclosure is the JSON-serializable representation of a media attachment.
-type enclosure struct {
-	URL    string `json:"url"`
-	Length string `json:"length"`
-	Type   string `json:"type"`
-}
-
-// source is the JSON-serializable representation of an Atom <source> element.
-type source struct {
-	Title   string `json:"title"`
-	ID      string `json:"id"`
-	Updated string `json:"updated"`
-}
-
 // FetchFeed downloads and parses the RSS/Atom feed identified by feedID, then
 // stores any new entries that are not already in the database.
 //
@@ -373,17 +334,17 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 
 	// --- Authors (full structured array) ---
 	if atomEntry != nil && len(atomEntry.Authors) > 0 {
-		persons := make([]person, len(atomEntry.Authors))
+		persons := make([]EntryPerson, len(atomEntry.Authors))
 		for i, a := range atomEntry.Authors {
-			persons[i] = person{Name: a.Name, Email: a.Email, URI: a.URI}
+			persons[i] = EntryPerson{Name: a.Name, Email: a.Email, URI: a.URI}
 		}
 		b, _ := json.Marshal(persons)
 		e.Authors = b
 	} else if len(item.Authors) > 0 {
-		persons := make([]person, 0, len(item.Authors))
+		persons := make([]EntryPerson, 0, len(item.Authors))
 		for _, a := range item.Authors {
 			if a != nil {
-				persons = append(persons, person{Name: a.Name, Email: a.Email})
+				persons = append(persons, EntryPerson{Name: a.Name, Email: a.Email})
 			}
 		}
 		if len(persons) > 0 {
@@ -394,9 +355,9 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 
 	// --- Links (full structured array) ---
 	if atomEntry != nil && len(atomEntry.Links) > 0 {
-		links := make([]link, len(atomEntry.Links))
+		links := make([]EntryLink, len(atomEntry.Links))
 		for i, l := range atomEntry.Links {
-			links[i] = link{
+			links[i] = EntryLink{
 				Href: l.Href, Rel: l.Rel, Type: l.Type,
 				Hreflang: l.Hreflang, Title: l.Title, Length: l.Length,
 			}
@@ -404,9 +365,9 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 		b, _ := json.Marshal(links)
 		e.Links = b
 	} else if len(item.Links) > 0 {
-		links := make([]link, len(item.Links))
+		links := make([]EntryLink, len(item.Links))
 		for i, href := range item.Links {
-			links[i] = link{Href: href}
+			links[i] = EntryLink{Href: href}
 		}
 		b, _ := json.Marshal(links)
 		e.Links = b
@@ -414,16 +375,16 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 
 	// --- Categories (structured with term/scheme/label) ---
 	if atomEntry != nil && len(atomEntry.Categories) > 0 {
-		cats := make([]category, len(atomEntry.Categories))
+		cats := make([]EntryCategory, len(atomEntry.Categories))
 		for i, c := range atomEntry.Categories {
-			cats[i] = category{Term: c.Term, Scheme: c.Scheme, Label: c.Label}
+			cats[i] = EntryCategory{Term: c.Term, Scheme: c.Scheme, Label: c.Label}
 		}
 		b, _ := json.Marshal(cats)
 		e.Categories = b
 	} else if len(item.Categories) > 0 {
-		cats := make([]category, len(item.Categories))
+		cats := make([]EntryCategory, len(item.Categories))
 		for i, c := range item.Categories {
-			cats[i] = category{Term: c}
+			cats[i] = EntryCategory{Term: c}
 		}
 		b, _ := json.Marshal(cats)
 		e.Categories = b
@@ -431,9 +392,9 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 
 	// --- Enclosures ---
 	if len(item.Enclosures) > 0 {
-		encs := make([]enclosure, len(item.Enclosures))
+		encs := make([]EntryEnclosure, len(item.Enclosures))
 		for i, v := range item.Enclosures {
-			encs[i] = enclosure{URL: v.URL, Length: v.Length, Type: v.Type}
+			encs[i] = EntryEnclosure{URL: v.URL, Length: v.Length, Type: v.Type}
 		}
 		b, _ := json.Marshal(encs)
 		e.Enclosures = b
@@ -441,9 +402,9 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 
 	// --- Contributors (Atom only) ---
 	if atomEntry != nil && len(atomEntry.Contributors) > 0 {
-		persons := make([]person, len(atomEntry.Contributors))
+		persons := make([]EntryPerson, len(atomEntry.Contributors))
 		for i, c := range atomEntry.Contributors {
-			persons[i] = person{Name: c.Name, Email: c.Email, URI: c.URI}
+			persons[i] = EntryPerson{Name: c.Name, Email: c.Email, URI: c.URI}
 		}
 		b, _ := json.Marshal(persons)
 		e.Contributors = b
@@ -456,7 +417,7 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 
 	// --- Source (Atom only) ---
 	if atomEntry != nil && atomEntry.Source != nil {
-		src := source{
+		src := EntrySource{
 			Title:   atomEntry.Source.Title,
 			ID:      atomEntry.Source.ID,
 			Updated: atomEntry.Source.Updated,

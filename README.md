@@ -118,10 +118,11 @@ shu cleanup --older-than 2160h
 
 ## Architecture
 
-`shu` follows a clean 3-layer architecture:
-1.  **CLI Layer (`cmd/`)**: Parses commands, flags, handles stdin/stdout formatting, and outputs tables/JSON/YAML using Cobra.
-2.  **Core Domain (`core/`)**: Contains business logic, the `Feed` and `Entry` data models, feed fetching, URL discovery logic, and the `Service` interface.
-3.  **Storage (`store/`)**: Provides the SQLite-backed persistence logic, implementing the domain interfaces with transactional, concurrent-safe operations.
+`shu` follows a clean 4-layer architecture:
+1.  **Frontend Layer (`cmd/`)**: Parses commands, flags, handles stdin/stdout formatting, and outputs tables/JSON/YAML using Cobra.
+2.  **Runtime Bootstrap (`app/`)**: Owns reusable startup concerns such as logger/store/service wiring so multiple frontends can share the same initialization path.
+3.  **Core Domain (`core/`)**: Contains business logic, the `Feed` and `Entry` data models, feed fetching, typed entry metadata helpers, URL discovery logic, and the `Service` interface.
+4.  **Storage (`store/`)**: Provides the SQLite-backed persistence logic, implementing the domain interfaces with transactional, concurrent-safe operations.
 
 The core fetch API also exposes structured observer callbacks (`FetchObserver`) so long-running frontends can react to per-feed progress, skips, and completion events without parsing logs or stdout.
 

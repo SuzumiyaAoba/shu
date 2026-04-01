@@ -1,21 +1,18 @@
 // Package cmd implements the CLI layer for the shu RSS aggregator using the
 // Cobra command framework.
 //
-// This package acts as the composition root: it wires together the [core.Service]
-// and [store.SQLiteStore] in the root command's PersistentPreRunE hook, making
-// the service instance available to all subcommands via the package-level svc
-// variable. The database connection is automatically closed in
-// PersistentPostRunE.
+// This package is the CLI frontend. It bootstraps a reusable runtime instance
+// from the app package in PersistentPreRunE, makes the resulting service
+// available to subcommands via the package-level svc variable, and closes the
+// runtime in PersistentPostRunE.
 package cmd
 
 import (
-	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 
+	"github.com/SuzumiyaAoba/shu/app"
 	"github.com/SuzumiyaAoba/shu/core"
-	"github.com/SuzumiyaAoba/shu/store"
 	"github.com/spf13/cobra"
 )
 
@@ -45,33 +42,16 @@ var rootCmd = &cobra.Command{
 	// logger, opens the SQLite database (creating the directory if needed),
 	// runs migrations, and constructs the core.Service.
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		var level slog.Level
-		switch logLevel {
-		case "debug":
-			level = slog.LevelDebug
-		case "info":
-			level = slog.LevelInfo
-		case "warn":
-			level = slog.LevelWarn
-		case "error":
-			level = slog.LevelError
-		default:
-			return fmt.Errorf("invalid log level: %q (must be debug, info, warn, error)", logLevel)
-		}
-		logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
-
-		dir := filepath.Dir(dbPath)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("create db directory: %w", err)
-		}
-
-		s, err := store.NewSQLiteStore(dbPath)
+		instance, err := app.Open(app.Config{
+			DBPath:    dbPath,
+			LogLevel:  logLevel,
+			LogOutput: os.Stderr,
+		})
 		if err != nil {
-			return fmt.Errorf("open database: %w", err)
+			return err
 		}
-		closer = s.Close
-
-		svc = core.New(s, logger)
+		closer = instance.Close
+		svc = instance.Service
 		return nil
 	},
 	// PersistentPostRunE runs after every subcommand to close the database.
