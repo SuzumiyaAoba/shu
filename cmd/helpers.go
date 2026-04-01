@@ -18,6 +18,19 @@ func parseIDArg(arg string) (int64, error) {
 	return id, nil
 }
 
+// parseIDArgs parses multiple command-line arguments as int64 IDs.
+func parseIDArgs(args []string) ([]int64, error) {
+	ids := make([]int64, len(args))
+	for i, arg := range args {
+		id, err := parseIDArg(arg)
+		if err != nil {
+			return nil, err
+		}
+		ids[i] = id
+	}
+	return ids, nil
+}
+
 // writeJSON encodes v as pretty-printed JSON to w.
 func writeJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)

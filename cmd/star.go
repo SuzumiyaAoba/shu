@@ -7,35 +7,49 @@ import (
 )
 
 var starCmd = &cobra.Command{
-	Use:   "star <entry-id>",
-	Short: "Bookmark an entry",
-	Args:  cobra.ExactArgs(1),
+	Use:   "star <entry-id> [entry-id...]",
+	Short: "Bookmark entries",
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := parseIDArg(args[0])
+		ids, err := parseIDArgs(args)
 		if err != nil {
 			return err
 		}
-		if err := svc.StarEntry(cmd.Context(), id); err != nil {
+		if len(ids) == 1 {
+			if err := svc.StarEntry(cmd.Context(), ids[0]); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Starred entry #%d\n", ids[0])
+			return nil
+		}
+		if err := svc.StarEntries(cmd.Context(), ids); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Starred entry #%d\n", id)
+		fmt.Fprintf(cmd.OutOrStdout(), "Starred %d entries\n", len(ids))
 		return nil
 	},
 }
 
 var unstarCmd = &cobra.Command{
-	Use:   "unstar <entry-id>",
-	Short: "Remove bookmark from an entry",
-	Args:  cobra.ExactArgs(1),
+	Use:   "unstar <entry-id> [entry-id...]",
+	Short: "Remove bookmarks from entries",
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := parseIDArg(args[0])
+		ids, err := parseIDArgs(args)
 		if err != nil {
 			return err
 		}
-		if err := svc.UnstarEntry(cmd.Context(), id); err != nil {
+		if len(ids) == 1 {
+			if err := svc.UnstarEntry(cmd.Context(), ids[0]); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Unstarred entry #%d\n", ids[0])
+			return nil
+		}
+		if err := svc.UnstarEntries(cmd.Context(), ids); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Unstarred entry #%d\n", id)
+		fmt.Fprintf(cmd.OutOrStdout(), "Unstarred %d entries\n", len(ids))
 		return nil
 	},
 }

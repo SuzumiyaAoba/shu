@@ -10,6 +10,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -43,9 +44,13 @@ type EntryStore interface {
 // EntryStateStore manages read/star state on entries.
 type EntryStateStore interface {
 	MarkEntryRead(ctx context.Context, id int64) error
+	MarkEntriesRead(ctx context.Context, ids []int64) error
 	MarkEntryUnread(ctx context.Context, id int64) error
+	MarkEntriesUnread(ctx context.Context, ids []int64) error
 	StarEntry(ctx context.Context, id int64) error
+	StarEntries(ctx context.Context, ids []int64) error
 	UnstarEntry(ctx context.Context, id int64) error
+	UnstarEntries(ctx context.Context, ids []int64) error
 }
 
 // TagStore handles tag CRUD and feed-tag associations.
@@ -65,7 +70,7 @@ type MaintenanceStore interface {
 
 // Store is the full persistence contract required by [Service].
 // It composes all role-specific interfaces. Implementations must be safe for
-// sequential use from a single goroutine.
+// concurrent use.
 type Store interface {
 	FeedStore
 	FeedHealthStore
@@ -100,9 +105,10 @@ func (t *userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error
 // [Store] (for persistence), and emits structured log messages for
 // observability.
 type Service struct {
-	store  Store
-	logger *slog.Logger
-	client *http.Client
+	store    Store
+	logger   *slog.Logger
+	client   *http.Client
+	clientMu sync.RWMutex
 }
 
 // New creates a [Service] with the given store and logger.
@@ -125,6 +131,8 @@ func New(store Store, logger *slog.Logger) *Service {
 // will NOT have the User-Agent transport; use [SetHTTPClientWithUserAgent] if
 // the User-Agent header is needed.
 func (s *Service) SetHTTPClient(c *http.Client) {
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
 	s.client = c
 }
 
@@ -140,8 +148,16 @@ func (s *Service) SetHTTPClientWithUserAgent(c *http.Client) {
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
 	s.client = &http.Client{
 		Timeout:   c.Timeout,
 		Transport: &userAgentTransport{base: transport},
 	}
+}
+
+func (s *Service) httpClient() *http.Client {
+	s.clientMu.RLock()
+	defer s.clientMu.RUnlock()
+	return s.client
 }

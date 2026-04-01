@@ -7,35 +7,49 @@ import (
 )
 
 var readCmd = &cobra.Command{
-	Use:   "read <entry-id>",
-	Short: "Mark an entry as read",
-	Args:  cobra.ExactArgs(1),
+	Use:   "read <entry-id> [entry-id...]",
+	Short: "Mark entries as read",
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := parseIDArg(args[0])
+		ids, err := parseIDArgs(args)
 		if err != nil {
 			return err
 		}
-		if err := svc.MarkEntryRead(cmd.Context(), id); err != nil {
+		if len(ids) == 1 {
+			if err := svc.MarkEntryRead(cmd.Context(), ids[0]); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Marked entry #%d as read\n", ids[0])
+			return nil
+		}
+		if err := svc.MarkEntriesRead(cmd.Context(), ids); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Marked entry #%d as read\n", id)
+		fmt.Fprintf(cmd.OutOrStdout(), "Marked %d entries as read\n", len(ids))
 		return nil
 	},
 }
 
 var unreadCmd = &cobra.Command{
-	Use:   "unread <entry-id>",
-	Short: "Mark an entry as unread",
-	Args:  cobra.ExactArgs(1),
+	Use:   "unread <entry-id> [entry-id...]",
+	Short: "Mark entries as unread",
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := parseIDArg(args[0])
+		ids, err := parseIDArgs(args)
 		if err != nil {
 			return err
 		}
-		if err := svc.MarkEntryUnread(cmd.Context(), id); err != nil {
+		if len(ids) == 1 {
+			if err := svc.MarkEntryUnread(cmd.Context(), ids[0]); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Marked entry #%d as unread\n", ids[0])
+			return nil
+		}
+		if err := svc.MarkEntriesUnread(cmd.Context(), ids); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Marked entry #%d as unread\n", id)
+		fmt.Fprintf(cmd.OutOrStdout(), "Marked %d entries as unread\n", len(ids))
 		return nil
 	},
 }

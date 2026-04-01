@@ -88,6 +88,93 @@ func TestFetchAll(t *testing.T) {
 	}
 }
 
+func TestFetchAllWithObserver(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		io.WriteString(w, testRSSFeed)
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	svc := newTestService(t, nil)
+	svc.SetHTTPClient(ts.Client())
+	ctx := context.Background()
+
+	feed1, _ := svc.AddFeed(ctx, ts.URL+"/feed1.xml", "")
+	feed2, _ := svc.AddFeed(ctx, ts.URL+"/feed2.xml", "")
+
+	var events []core.FetchEvent
+	observer := core.FetchObserverFunc(func(event core.FetchEvent) {
+		events = append(events, event)
+	})
+
+	count, err := svc.FetchAllWithObserver(ctx, observer)
+	if err != nil {
+		t.Fatalf("FetchAllWithObserver failed: %v", err)
+	}
+	if count != 4 {
+		t.Fatalf("FetchAllWithObserver returned %d, want 4", count)
+	}
+
+	started := map[int64]bool{}
+	completed := map[int64]int{}
+	for _, event := range events {
+		switch event.Type {
+		case core.FetchEventStarted:
+			started[event.FeedID] = true
+		case core.FetchEventCompleted:
+			completed[event.FeedID] = event.NewEntries
+		}
+	}
+
+	if !started[feed1.ID] || !started[feed2.ID] {
+		t.Fatalf("expected start events for both feeds, got %+v", events)
+	}
+	if completed[feed1.ID] != 2 || completed[feed2.ID] != 2 {
+		t.Fatalf("expected completed events with 2 entries each, got %+v", events)
+	}
+}
+
+func TestFetchFeedWithObserverDisabled(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		io.WriteString(w, testRSSFeed)
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	svc := newTestService(t, nil)
+	svc.SetHTTPClient(ts.Client())
+	ctx := context.Background()
+
+	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
+	if err := svc.DisableFeed(ctx, feed.ID); err != nil {
+		t.Fatalf("DisableFeed failed: %v", err)
+	}
+
+	var events []core.FetchEvent
+	observer := core.FetchObserverFunc(func(event core.FetchEvent) {
+		events = append(events, event)
+	})
+
+	entries, err := svc.FetchFeedWithObserver(ctx, feed.ID, observer)
+	if err != nil {
+		t.Fatalf("FetchFeedWithObserver failed: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("got %d entries, want 0", len(entries))
+	}
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want 2", len(events))
+	}
+	if events[0].Type != core.FetchEventStarted {
+		t.Fatalf("first event = %q, want %q", events[0].Type, core.FetchEventStarted)
+	}
+	if events[1].Type != core.FetchEventSkipped || events[1].SkipReason != core.FetchSkipDisabled {
+		t.Fatalf("second event = %+v, want skipped/disabled", events[1])
+	}
+}
+
 func TestListEntries(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")

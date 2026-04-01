@@ -33,3 +33,31 @@ func TestStarUnstarCmd(t *testing.T) {
 		t.Errorf("unexpected output: %s", out)
 	}
 }
+
+func TestStarUnstarCmdMultipleIDs(t *testing.T) {
+	tsURL := setupTest(t)
+
+	_, _ = executeCommand("add", tsURL+"/feed.xml")
+	_, _ = executeCommand("fetch")
+
+	out, err := executeCommand("star", "1", "2")
+	if err != nil {
+		t.Fatalf("star command failed: %v", err)
+	}
+	if !strings.Contains(out, "Starred 2 entries") {
+		t.Errorf("unexpected output: %s", out)
+	}
+
+	starredOut, _ := executeCommand("entries", "--starred")
+	if !strings.Contains(starredOut, "Post 1") || !strings.Contains(starredOut, "Post 2") {
+		t.Errorf("expected both starred entries in output: %s", starredOut)
+	}
+
+	out, err = executeCommand("unstar", "1", "2")
+	if err != nil {
+		t.Fatalf("unstar command failed: %v", err)
+	}
+	if !strings.Contains(out, "Unstarred 2 entries") {
+		t.Errorf("unexpected output: %s", out)
+	}
+}

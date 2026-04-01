@@ -58,7 +58,9 @@ func formatNullableTime(t *time.Time) *string {
 //
 // On initialization it enables WAL journal mode for better read concurrency,
 // turns on foreign key enforcement (required for ON DELETE CASCADE), and
-// applies the embedded schema migrations.
+// applies the embedded schema migrations. The underlying [sql.DB] is safe for
+// concurrent use; the store keeps max open connections at 1 to avoid SQLite
+// lock contention while still allowing concurrent callers through the pool.
 type SQLiteStore struct {
 	db *sql.DB
 }
@@ -434,17 +436,29 @@ func scanEntry(s scanner) (*core.Entry, error) {
 	}
 
 	e.Categories = []byte(categories)
-	if len(e.Categories) == 0 { e.Categories = nil }
+	if len(e.Categories) == 0 {
+		e.Categories = nil
+	}
 	e.Enclosures = []byte(enclosures)
-	if len(e.Enclosures) == 0 { e.Enclosures = nil }
+	if len(e.Enclosures) == 0 {
+		e.Enclosures = nil
+	}
 	e.Authors = []byte(authors)
-	if len(e.Authors) == 0 { e.Authors = nil }
+	if len(e.Authors) == 0 {
+		e.Authors = nil
+	}
 	e.Links = []byte(links)
-	if len(e.Links) == 0 { e.Links = nil }
+	if len(e.Links) == 0 {
+		e.Links = nil
+	}
 	e.Contributors = []byte(contributors)
-	if len(e.Contributors) == 0 { e.Contributors = nil }
+	if len(e.Contributors) == 0 {
+		e.Contributors = nil
+	}
 	e.Source = []byte(source)
-	if len(e.Source) == 0 { e.Source = nil }
+	if len(e.Source) == 0 {
+		e.Source = nil
+	}
 
 	return &e, nil
 }
@@ -491,24 +505,68 @@ func (s *SQLiteStore) UpdateFeedCacheHeaders(ctx context.Context, id int64, etag
 	return nil
 }
 
+func buildIDPlaceholders(ids []int64) (string, []any) {
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	return strings.Join(placeholders, ", "), args
+}
+
+func (s *SQLiteStore) setEntriesColumn(ctx context.Context, column string, value any, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	placeholders, args := buildIDPlaceholders(ids)
+	args = append([]any{value}, args...)
+
+	query := fmt.Sprintf(`UPDATE entries SET %s = ? WHERE id IN (%s)`, column, placeholders)
+	_, err := s.db.ExecContext(ctx, query, args...)
+	return err
+}
+
+func (s *SQLiteStore) clearEntriesColumn(ctx context.Context, column string, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	placeholders, args := buildIDPlaceholders(ids)
+	query := fmt.Sprintf(`UPDATE entries SET %s = NULL WHERE id IN (%s)`, column, placeholders)
+	_, err := s.db.ExecContext(ctx, query, args...)
+	return err
+}
+
 // MarkEntryRead sets the read_at timestamp on the given entry.
 func (s *SQLiteStore) MarkEntryRead(ctx context.Context, id int64) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE entries SET read_at = ? WHERE id = ?`, nowRFC3339(), id,
-	)
-	if err != nil {
+	if err := s.setEntriesColumn(ctx, "read_at", nowRFC3339(), []int64{id}); err != nil {
 		return fmt.Errorf("mark entry read: %w", err)
+	}
+	return nil
+}
+
+// MarkEntriesRead sets the read_at timestamp on the given entries.
+func (s *SQLiteStore) MarkEntriesRead(ctx context.Context, ids []int64) error {
+	if err := s.setEntriesColumn(ctx, "read_at", nowRFC3339(), ids); err != nil {
+		return fmt.Errorf("mark entries read: %w", err)
 	}
 	return nil
 }
 
 // MarkEntryUnread clears the read_at timestamp on the given entry.
 func (s *SQLiteStore) MarkEntryUnread(ctx context.Context, id int64) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE entries SET read_at = NULL WHERE id = ?`, id,
-	)
-	if err != nil {
+	if err := s.clearEntriesColumn(ctx, "read_at", []int64{id}); err != nil {
 		return fmt.Errorf("mark entry unread: %w", err)
+	}
+	return nil
+}
+
+// MarkEntriesUnread clears the read_at timestamp on the given entries.
+func (s *SQLiteStore) MarkEntriesUnread(ctx context.Context, ids []int64) error {
+	if err := s.clearEntriesColumn(ctx, "read_at", ids); err != nil {
+		return fmt.Errorf("mark entries unread: %w", err)
 	}
 	return nil
 }
@@ -631,18 +689,32 @@ func (s *SQLiteStore) SearchEntries(ctx context.Context, query string, limit int
 
 // StarEntry sets the starred_at timestamp on the given entry.
 func (s *SQLiteStore) StarEntry(ctx context.Context, id int64) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE entries SET starred_at = ? WHERE id = ?`, nowRFC3339(), id)
-	if err != nil {
+	if err := s.setEntriesColumn(ctx, "starred_at", nowRFC3339(), []int64{id}); err != nil {
 		return fmt.Errorf("star entry: %w", err)
+	}
+	return nil
+}
+
+// StarEntries sets the starred_at timestamp on the given entries.
+func (s *SQLiteStore) StarEntries(ctx context.Context, ids []int64) error {
+	if err := s.setEntriesColumn(ctx, "starred_at", nowRFC3339(), ids); err != nil {
+		return fmt.Errorf("star entries: %w", err)
 	}
 	return nil
 }
 
 // UnstarEntry clears the starred_at timestamp on the given entry.
 func (s *SQLiteStore) UnstarEntry(ctx context.Context, id int64) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE entries SET starred_at = NULL WHERE id = ?`, id)
-	if err != nil {
+	if err := s.clearEntriesColumn(ctx, "starred_at", []int64{id}); err != nil {
 		return fmt.Errorf("unstar entry: %w", err)
+	}
+	return nil
+}
+
+// UnstarEntries clears the starred_at timestamp on the given entries.
+func (s *SQLiteStore) UnstarEntries(ctx context.Context, ids []int64) error {
+	if err := s.clearEntriesColumn(ctx, "starred_at", ids); err != nil {
+		return fmt.Errorf("unstar entries: %w", err)
 	}
 	return nil
 }

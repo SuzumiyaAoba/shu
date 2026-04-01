@@ -63,14 +63,43 @@ type source struct {
 //
 // It returns a slice containing only the newly inserted entries.
 func (s *Service) FetchFeed(ctx context.Context, feedID int64) ([]*Entry, error) {
+	return s.FetchFeedWithObserver(ctx, feedID, nil)
+}
+
+// FetchFeedWithObserver downloads and parses a single feed while emitting
+// structured progress events to observer.
+func (s *Service) FetchFeedWithObserver(ctx context.Context, feedID int64, observer FetchObserver) ([]*Entry, error) {
+	notifier := newFetchNotifier(observer)
+	return s.fetchFeedByID(ctx, feedID, notifier)
+}
+
+func (s *Service) fetchFeedByID(ctx context.Context, feedID int64, notifier *fetchNotifier) ([]*Entry, error) {
 	feed, err := s.store.GetFeed(ctx, feedID)
 	if err != nil {
 		return nil, fmt.Errorf("get feed %d: %w", feedID, err)
 	}
 
+	return s.fetchFeed(ctx, feed, notifier)
+}
+
+func (s *Service) fetchFeed(ctx context.Context, feed *Feed, notifier *fetchNotifier) ([]*Entry, error) {
+	notifier.emit(FetchEvent{
+		Type:      FetchEventStarted,
+		FeedID:    feed.ID,
+		FeedTitle: feed.Title,
+		FeedURL:   feed.URL,
+	})
+
 	// Skip disabled feeds.
 	if feed.Disabled {
-		s.logger.Warn("feed disabled, skipping", "id", feedID, "title", feed.Title)
+		s.logger.Warn("feed disabled, skipping", "id", feed.ID, "title", feed.Title)
+		notifier.emit(FetchEvent{
+			Type:       FetchEventSkipped,
+			FeedID:     feed.ID,
+			FeedTitle:  feed.Title,
+			FeedURL:    feed.URL,
+			SkipReason: FetchSkipDisabled,
+		})
 		return nil, nil
 	}
 
@@ -78,25 +107,48 @@ func (s *Service) FetchFeed(ctx context.Context, feedID int64) ([]*Entry, error)
 	body, headers, err := s.fetchBodyConditional(ctx, feed.URL, feed.ETag, feed.LastModified)
 	if err != nil {
 		// Record the error for health monitoring.
-		if recErr := s.store.RecordFeedError(ctx, feedID, err.Error()); recErr != nil {
-			s.logger.Warn("failed to record feed error", "id", feedID, "error", recErr)
+		if recErr := s.store.RecordFeedError(ctx, feed.ID, err.Error()); recErr != nil {
+			s.logger.Warn("failed to record feed error", "id", feed.ID, "error", recErr)
 		}
-		return nil, fmt.Errorf("fetch feed %s: %w", feed.URL, err)
+		fetchErr := fmt.Errorf("fetch feed %s: %w", feed.URL, err)
+		notifier.emit(FetchEvent{
+			Type:      FetchEventCompleted,
+			FeedID:    feed.ID,
+			FeedTitle: feed.Title,
+			FeedURL:   feed.URL,
+			Err:       fetchErr,
+		})
+		return nil, fetchErr
 	}
 
 	// 304 Not Modified — nothing new.
 	if body == nil {
-		if err := s.store.UpdateFeedFetchedAt(ctx, feedID); err != nil {
-			return nil, fmt.Errorf("update fetched_at: %w", err)
+		if err := s.store.UpdateFeedFetchedAt(ctx, feed.ID); err != nil {
+			updateErr := fmt.Errorf("update fetched_at: %w", err)
+			notifier.emit(FetchEvent{
+				Type:      FetchEventCompleted,
+				FeedID:    feed.ID,
+				FeedTitle: feed.Title,
+				FeedURL:   feed.URL,
+				Err:       updateErr,
+			})
+			return nil, updateErr
 		}
-		s.logger.Info("feed not modified", "id", feedID, "title", feed.Title)
+		s.logger.Info("feed not modified", "id", feed.ID, "title", feed.Title)
+		notifier.emit(FetchEvent{
+			Type:       FetchEventSkipped,
+			FeedID:     feed.ID,
+			FeedTitle:  feed.Title,
+			FeedURL:    feed.URL,
+			SkipReason: FetchSkipNotModified,
+		})
 		return nil, nil
 	}
 
 	// Store cache headers for next conditional GET.
 	if etag := headers.Get("ETag"); etag != "" || headers.Get("Last-Modified") != "" {
-		if err := s.store.UpdateFeedCacheHeaders(ctx, feedID, headers.Get("ETag"), headers.Get("Last-Modified")); err != nil {
-			s.logger.Warn("failed to update cache headers", "id", feedID, "error", err)
+		if err := s.store.UpdateFeedCacheHeaders(ctx, feed.ID, headers.Get("ETag"), headers.Get("Last-Modified")); err != nil {
+			s.logger.Warn("failed to update cache headers", "id", feed.ID, "error", err)
 		}
 	}
 
@@ -104,7 +156,15 @@ func (s *Service) FetchFeed(ctx context.Context, feedID int64) ([]*Entry, error)
 	fp := gofeed.NewParser()
 	parsed, err := fp.Parse(bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("parse feed %s: %w", feed.URL, err)
+		parseErr := fmt.Errorf("parse feed %s: %w", feed.URL, err)
+		notifier.emit(FetchEvent{
+			Type:      FetchEventCompleted,
+			FeedID:    feed.ID,
+			FeedTitle: feed.Title,
+			FeedURL:   feed.URL,
+			Err:       parseErr,
+		})
+		return nil, parseErr
 	}
 
 	// Atom-specific parse for fields lost in universal translation.
@@ -123,45 +183,90 @@ func (s *Service) FetchFeed(ctx context.Context, feedID int64) ([]*Entry, error)
 			continue
 		}
 
-		e := buildEntry(feedID, guid, item, atomEntryByID[guid])
+		e := buildEntry(feed.ID, guid, item, atomEntryByID[guid])
 		entries = append(entries, e)
 	}
 
 	inserted, err := s.store.AddEntries(ctx, entries)
 	if err != nil {
-		return nil, fmt.Errorf("store entries: %w", err)
+		storeErr := fmt.Errorf("store entries: %w", err)
+		notifier.emit(FetchEvent{
+			Type:      FetchEventCompleted,
+			FeedID:    feed.ID,
+			FeedTitle: feed.Title,
+			FeedURL:   feed.URL,
+			Err:       storeErr,
+		})
+		return nil, storeErr
 	}
 
-	if err := s.store.UpdateFeedFetchedAt(ctx, feedID); err != nil {
-		return nil, fmt.Errorf("update fetched_at: %w", err)
+	if err := s.store.UpdateFeedFetchedAt(ctx, feed.ID); err != nil {
+		updateErr := fmt.Errorf("update fetched_at: %w", err)
+		notifier.emit(FetchEvent{
+			Type:      FetchEventCompleted,
+			FeedID:    feed.ID,
+			FeedTitle: feed.Title,
+			FeedURL:   feed.URL,
+			Err:       updateErr,
+		})
+		return nil, updateErr
 	}
 
 	// Reset error count on successful fetch.
-	if err := s.store.ResetFeedError(ctx, feedID); err != nil {
-		s.logger.Warn("failed to reset feed error", "id", feedID, "error", err)
+	if err := s.store.ResetFeedError(ctx, feed.ID); err != nil {
+		s.logger.Warn("failed to reset feed error", "id", feed.ID, "error", err)
 	}
 
-	s.logger.Info("feed fetched", "id", feedID, "title", feed.Title, "new_entries", inserted)
+	s.logger.Info("feed fetched", "id", feed.ID, "title", feed.Title, "new_entries", inserted)
 
 	// Return newly inserted entries for convenience.
 	// We retrieve them by querying the newest `inserted` entries for this feed.
 	if inserted == 0 {
+		notifier.emit(FetchEvent{
+			Type:      FetchEventCompleted,
+			FeedID:    feed.ID,
+			FeedTitle: feed.Title,
+			FeedURL:   feed.URL,
+		})
 		return nil, nil
 	}
 	if inserted == len(entries) {
+		notifier.emit(FetchEvent{
+			Type:       FetchEventCompleted,
+			FeedID:     feed.ID,
+			FeedTitle:  feed.Title,
+			FeedURL:    feed.URL,
+			NewEntries: len(entries),
+		})
 		return entries, nil
 	}
 
+	feedID := feed.ID
 	filter := EntryFilter{
 		FeedID: &feedID,
 		Limit:  inserted,
 	}
 	newEntries, err := s.store.ListEntries(ctx, filter)
 	if err != nil {
-		s.logger.Warn("failed to retrieve newly inserted entries", "id", feedID, "error", err)
+		s.logger.Warn("failed to retrieve newly inserted entries", "id", feed.ID, "error", err)
 		// We can gracefully format the first few entries since the actual exact set is unknown.
+		notifier.emit(FetchEvent{
+			Type:       FetchEventCompleted,
+			FeedID:     feed.ID,
+			FeedTitle:  feed.Title,
+			FeedURL:    feed.URL,
+			NewEntries: inserted,
+		})
 		return entries[:inserted], nil
 	}
+
+	notifier.emit(FetchEvent{
+		Type:       FetchEventCompleted,
+		FeedID:     feed.ID,
+		FeedTitle:  feed.Title,
+		FeedURL:    feed.URL,
+		NewEntries: len(newEntries),
+	})
 	return newEntries, nil
 }
 
@@ -186,7 +291,7 @@ func (s *Service) fetchBodyConditional(ctx context.Context, url, etag, lastModif
 		req.Header.Set("If-Modified-Since", lastModified)
 	}
 
-	resp, err := s.client.Do(req)
+	resp, err := s.httpClient().Do(req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("http get: %w", err)
 	}
@@ -373,16 +478,31 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 // Feeds that have a per-feed interval set and were fetched more recently than
 // that interval are skipped.
 func (s *Service) FetchAll(ctx context.Context) (int, error) {
+	return s.FetchAllWithObserver(ctx, nil)
+}
+
+// FetchAllWithObserver fetches all eligible feeds while emitting structured
+// progress events to observer.
+func (s *Service) FetchAllWithObserver(ctx context.Context, observer FetchObserver) (int, error) {
 	feeds, err := s.store.ListFeeds(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("list feeds: %w", err)
 	}
+
+	notifier := newFetchNotifier(observer)
 
 	// Filter feeds that should be fetched.
 	var toFetch []*Feed
 	for _, feed := range feeds {
 		if feed.FetchIntervalSec > 0 && feed.FetchedAt != nil {
 			if time.Since(*feed.FetchedAt) < time.Duration(feed.FetchIntervalSec)*time.Second {
+				notifier.emit(FetchEvent{
+					Type:       FetchEventSkipped,
+					FeedID:     feed.ID,
+					FeedTitle:  feed.Title,
+					FeedURL:    feed.URL,
+					SkipReason: FetchSkipInterval,
+				})
 				continue
 			}
 		}
@@ -404,7 +524,7 @@ func (s *Service) FetchAll(ctx context.Context) (int, error) {
 		sem <- struct{}{}
 		go func(f *Feed) {
 			defer func() { <-sem }()
-			entries, err := s.FetchFeed(ctx, f.ID)
+			entries, err := s.fetchFeed(ctx, f, notifier)
 			if err != nil {
 				s.logger.Error("failed to fetch feed", "id", f.ID, "url", f.URL, "error", err)
 				results <- result{0}

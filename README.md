@@ -7,6 +7,7 @@
 - **Full RSS/Atom Support**: Uses `mmcdole/gofeed` to cover pretty much any RSS/Atom feed out there.
 - **Smart Fetching**: Automatic deduplication, health tracking for broken feeds, and full support for `ETag`/`Last-Modified` conditional GET requests.
 - **Organization**: Bookmark stars (`star`/`unstar`), marking read/unread, and custom tags for feeds.
+- **UI-ready Core**: Progress observers for fetch workflows and batch entry state APIs make it easier to build alternate frontends such as a TUI.
 - **Discovery**: Built-in RSS feed auto-discovery from standard website URLs (`shu discover`).
 - **Flexible Formats**: Native stdout table rendering or machine-readable `--json` and `--yaml` formats seamlessly integrated across all query commands.
 - **Import/Export**: Full OPML import and export capabilities.
@@ -121,6 +122,8 @@ shu cleanup --older-than 2160h
 1.  **CLI Layer (`cmd/`)**: Parses commands, flags, handles stdin/stdout formatting, and outputs tables/JSON/YAML using Cobra.
 2.  **Core Domain (`core/`)**: Contains business logic, the `Feed` and `Entry` data models, feed fetching, URL discovery logic, and the `Service` interface.
 3.  **Storage (`store/`)**: Provides the SQLite-backed persistence logic, implementing the domain interfaces with transactional, concurrent-safe operations.
+
+The core fetch API also exposes structured observer callbacks (`FetchObserver`) so long-running frontends can react to per-feed progress, skips, and completion events without parsing logs or stdout.
 
 ## Database
 
