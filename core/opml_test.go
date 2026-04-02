@@ -153,6 +153,49 @@ func TestImportOPMLDuplicateSkip(t *testing.T) {
 	}
 }
 
+func TestImportOPMLDuplicateAddsTag(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		io.WriteString(w, testRSSFeed)
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	svc := newTestService(t, nil)
+	svc.SetHTTPClient(ts.Client())
+	ctx := context.Background()
+
+	feed, err := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
+	if err != nil {
+		t.Fatalf("AddFeed failed: %v", err)
+	}
+
+	opmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="Tech">
+      <outline text="Same Feed" type="rss" xmlUrl="` + ts.URL + `/feed.xml"/>
+    </outline>
+  </body>
+</opml>`
+
+	added, err := svc.ImportOPML(ctx, strings.NewReader(opmlDoc))
+	if err != nil {
+		t.Fatalf("ImportOPML failed: %v", err)
+	}
+	if added != 0 {
+		t.Fatalf("added = %d, want 0", added)
+	}
+
+	tags, err := svc.ListTags(ctx, feed.ID)
+	if err != nil {
+		t.Fatalf("ListTags failed: %v", err)
+	}
+	if len(tags) != 1 || tags[0].Name != "Tech" {
+		t.Fatalf("tags = %+v, want [Tech]", tags)
+	}
+}
+
 func TestImportOPMLReturnsAddFeedError(t *testing.T) {
 	svc := newTestService(t, nil)
 	ctx := context.Background()

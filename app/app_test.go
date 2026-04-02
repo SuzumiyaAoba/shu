@@ -175,6 +175,7 @@ func newFakeStore() *fakeStore { return &fakeStore{} }
 
 func (f *fakeStore) AddFeed(context.Context, *core.Feed) error                           { return nil }
 func (f *fakeStore) GetFeed(context.Context, int64) (*core.Feed, error)                  { return nil, nil }
+func (f *fakeStore) GetFeedByURL(context.Context, string) (*core.Feed, error)            { return nil, nil }
 func (f *fakeStore) ListFeeds(context.Context) ([]*core.Feed, error)                     { return nil, nil }
 func (f *fakeStore) RemoveFeed(context.Context, int64) error                             { return nil }
 func (f *fakeStore) UpdateFeed(context.Context, int64, core.FeedUpdate) error            { return nil }
@@ -188,6 +189,7 @@ func (f *fakeStore) GetEntry(context.Context, int64) (*core.Entry, error)       
 func (f *fakeStore) ListEntries(context.Context, core.EntryFilter) ([]*core.Entry, error) {
 	return nil, nil
 }
+func (f *fakeStore) CountEntries(context.Context, core.EntryFilter) (int, error) { return 0, nil }
 func (f *fakeStore) SearchEntries(context.Context, string, int) ([]*core.Entry, error) {
 	return nil, nil
 }

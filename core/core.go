@@ -8,6 +8,7 @@ package core
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -18,6 +19,7 @@ import (
 type FeedStore interface {
 	AddFeed(ctx context.Context, feed *Feed) error
 	GetFeed(ctx context.Context, id int64) (*Feed, error)
+	GetFeedByURL(ctx context.Context, url string) (*Feed, error)
 	ListFeeds(ctx context.Context) ([]*Feed, error)
 	RemoveFeed(ctx context.Context, id int64) error
 	UpdateFeed(ctx context.Context, id int64, update FeedUpdate) error
@@ -37,6 +39,7 @@ type EntryStore interface {
 	AddEntries(ctx context.Context, entries []*Entry) (int, error)
 	GetEntry(ctx context.Context, id int64) (*Entry, error)
 	ListEntries(ctx context.Context, filter EntryFilter) ([]*Entry, error)
+	CountEntries(ctx context.Context, filter EntryFilter) (int, error)
 	SearchEntries(ctx context.Context, query string, limit int) ([]*Entry, error)
 	FindDuplicateEntries(ctx context.Context, entryID int64) ([]*Entry, error)
 }
@@ -116,6 +119,9 @@ type Service struct {
 // The returned service uses an HTTP client with a 30-second timeout and a
 // custom transport that sets the User-Agent header to "shu/0.1".
 func New(store Store, logger *slog.Logger) *Service {
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
 	return &Service{
 		store:  store,
 		logger: logger,

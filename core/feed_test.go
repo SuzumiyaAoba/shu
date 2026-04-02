@@ -209,3 +209,26 @@ func TestRemoveFeed(t *testing.T) {
 		t.Errorf("got %d feeds, want 0", len(feeds))
 	}
 }
+
+func TestNewWithNilLogger(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		io.WriteString(w, testRSSFeed)
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	s, err := store.NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+	defer s.Close()
+
+	svc := core.New(s, nil)
+	svc.SetHTTPClient(ts.Client())
+
+	ctx := context.Background()
+	if _, err := svc.AddFeed(ctx, ts.URL+"/feed.xml", ""); err != nil {
+		t.Fatalf("AddFeed failed: %v", err)
+	}
+}

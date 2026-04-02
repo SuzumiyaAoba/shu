@@ -194,6 +194,18 @@ func TestUpdateFeedFetchedAt(t *testing.T) {
 	}
 }
 
+func TestSQLiteBusyTimeout(t *testing.T) {
+	s := newTestStore(t)
+
+	var timeout int
+	if err := s.db.QueryRow(`PRAGMA busy_timeout`).Scan(&timeout); err != nil {
+		t.Fatalf("query busy_timeout failed: %v", err)
+	}
+	if timeout != 5000 {
+		t.Fatalf("busy_timeout = %d, want 5000", timeout)
+	}
+}
+
 func TestAddEntries(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -825,6 +837,63 @@ func TestFeedStats(t *testing.T) {
 	}
 	if stats[0].StarredCount != 1 {
 		t.Errorf("StarredCount = %d, want 1", stats[0].StarredCount)
+	}
+}
+
+func TestFeedStatsNoEntries(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	_ = s.AddFeed(ctx, feed)
+
+	stats, err := s.FeedStats(ctx)
+	if err != nil {
+		t.Fatalf("FeedStats failed: %v", err)
+	}
+	if len(stats) != 1 {
+		t.Fatalf("got %d stats, want 1", len(stats))
+	}
+	if stats[0].TotalCount != 0 {
+		t.Errorf("TotalCount = %d, want 0", stats[0].TotalCount)
+	}
+	if stats[0].UnreadCount != 0 {
+		t.Errorf("UnreadCount = %d, want 0", stats[0].UnreadCount)
+	}
+	if stats[0].StarredCount != 0 {
+		t.Errorf("StarredCount = %d, want 0", stats[0].StarredCount)
+	}
+}
+
+func TestCountEntries(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	_ = s.AddFeed(ctx, feed)
+
+	_, _ = s.AddEntries(ctx, []*core.Entry{
+		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed.ID, GUID: "2", Title: "Entry 2", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+	})
+
+	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 1})
+	_ = s.MarkEntryRead(ctx, entries[0].ID)
+
+	total, err := s.CountEntries(ctx, core.EntryFilter{})
+	if err != nil {
+		t.Fatalf("CountEntries failed: %v", err)
+	}
+	if total != 2 {
+		t.Errorf("total = %d, want 2", total)
+	}
+
+	unread, err := s.CountEntries(ctx, core.EntryFilter{UnreadOnly: true})
+	if err != nil {
+		t.Fatalf("CountEntries unread failed: %v", err)
+	}
+	if unread != 1 {
+		t.Errorf("unread = %d, want 1", unread)
 	}
 }
 

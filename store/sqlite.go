@@ -95,6 +95,10 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, fmt.Errorf("set journal mode: %w", err)
 	}
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("set busy timeout: %w", err)
+	}
 	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
@@ -200,6 +204,21 @@ func (s *SQLiteStore) GetFeed(ctx context.Context, id int64) (*core.Feed, error)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("feed %d: %w", id, core.ErrFeedNotFound)
+		}
+		return nil, err
+	}
+	return feed, nil
+}
+
+// GetFeedByURL retrieves a single feed by its unique URL.
+func (s *SQLiteStore) GetFeedByURL(ctx context.Context, url string) (*core.Feed, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+feedColumns+` FROM feeds WHERE url = ?`, url,
+	)
+	feed, err := scanFeed(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("feed %s: %w", url, core.ErrFeedNotFound)
 		}
 		return nil, err
 	}
@@ -321,26 +340,7 @@ func (s *SQLiteStore) GetEntry(ctx context.Context, id int64) (*core.Entry, erro
 // Results are always ordered by fetched_at DESC (newest first).
 func (s *SQLiteStore) ListEntries(ctx context.Context, filter core.EntryFilter) ([]*core.Entry, error) {
 	query := `SELECT ` + entryColumns + ` FROM entries`
-	var args []any
-	var conditions []string
-
-	if filter.FeedID != nil {
-		conditions = append(conditions, `feed_id = ?`)
-		args = append(args, *filter.FeedID)
-	}
-
-	if filter.UnreadOnly {
-		conditions = append(conditions, `read_at IS NULL`)
-	}
-
-	if filter.Tag != "" {
-		conditions = append(conditions, `feed_id IN (SELECT ft.feed_id FROM feed_tags ft JOIN tags t ON t.id = ft.tag_id WHERE t.name = ?)`)
-		args = append(args, filter.Tag)
-	}
-
-	if filter.StarredOnly {
-		conditions = append(conditions, `starred_at IS NOT NULL`)
-	}
+	conditions, args := buildEntryConditions(filter)
 
 	if len(conditions) > 0 {
 		query += ` WHERE ` + strings.Join(conditions, ` AND `)
@@ -373,6 +373,46 @@ func (s *SQLiteStore) ListEntries(ctx context.Context, filter core.EntryFilter) 
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
+}
+
+// CountEntries returns the total number of entries matching the filter.
+func (s *SQLiteStore) CountEntries(ctx context.Context, filter core.EntryFilter) (int, error) {
+	query := `SELECT COUNT(*) FROM entries`
+	conditions, args := buildEntryConditions(filter)
+	if len(conditions) > 0 {
+		query += ` WHERE ` + strings.Join(conditions, ` AND `)
+	}
+
+	var count int
+	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count entries: %w", err)
+	}
+	return count, nil
+}
+
+func buildEntryConditions(filter core.EntryFilter) ([]string, []any) {
+	var args []any
+	var conditions []string
+
+	if filter.FeedID != nil {
+		conditions = append(conditions, `feed_id = ?`)
+		args = append(args, *filter.FeedID)
+	}
+
+	if filter.UnreadOnly {
+		conditions = append(conditions, `read_at IS NULL`)
+	}
+
+	if filter.Tag != "" {
+		conditions = append(conditions, `feed_id IN (SELECT ft.feed_id FROM feed_tags ft JOIN tags t ON t.id = ft.tag_id WHERE t.name = ?)`)
+		args = append(args, filter.Tag)
+	}
+
+	if filter.StarredOnly {
+		conditions = append(conditions, `starred_at IS NOT NULL`)
+	}
+
+	return conditions, args
 }
 
 // scanner is a minimal interface satisfied by both *sql.Row and *sql.Rows,
@@ -812,7 +852,7 @@ func (s *SQLiteStore) FeedStats(ctx context.Context) ([]core.FeedStats, error) {
 		SELECT
 			f.id, f.title, f.url,
 			COUNT(e.id) AS total,
-			SUM(CASE WHEN e.read_at IS NULL THEN 1 ELSE 0 END) AS unread,
+			SUM(CASE WHEN e.id IS NOT NULL AND e.read_at IS NULL THEN 1 ELSE 0 END) AS unread,
 			SUM(CASE WHEN e.starred_at IS NOT NULL THEN 1 ELSE 0 END) AS starred,
 			f.fetched_at, f.error_count, f.last_error, f.disabled
 		FROM feeds f

@@ -153,6 +153,15 @@ type EntryFilter struct {
 	StarredOnly bool `json:"starred_only"`
 }
 
+// EntryPage is a paginated view of entries.
+type EntryPage struct {
+	Entries    []*Entry `json:"entries"`
+	TotalCount int      `json:"total_count"`
+	Offset     int      `json:"offset"`
+	Limit      int      `json:"limit"`
+	HasMore    bool     `json:"has_more"`
+}
+
 // FeedUpdate holds the mutable fields for updating a feed.
 // Nil pointer fields are left unchanged.
 type FeedUpdate struct {

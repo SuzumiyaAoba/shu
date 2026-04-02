@@ -160,15 +160,24 @@ func (s *Service) importOutline(ctx context.Context, outline OPMLOutline, parent
 	feed, err := s.AddFeed(ctx, outline.XMLURL, title)
 	if err != nil {
 		if errors.Is(err, ErrFeedAlreadyExists) {
-			s.logger.Info("skip duplicate OPML feed", "url", outline.XMLURL)
+			s.logger.Info("reuse duplicate OPML feed", "url", outline.XMLURL)
+			if parentTag != "" {
+				existingFeed, getErr := s.store.GetFeedByURL(ctx, outline.XMLURL)
+				if getErr != nil {
+					return 0, fmt.Errorf("get duplicate OPML feed %s: %w", outline.XMLURL, getErr)
+				}
+				if err := s.AddTag(ctx, existingFeed.ID, parentTag); err != nil {
+					return 0, fmt.Errorf("tag duplicate OPML feed %s: %w", outline.XMLURL, err)
+				}
+			}
 			return 0, nil
 		}
 		return 0, fmt.Errorf("add OPML feed %s: %w", outline.XMLURL, err)
 	}
 
 	if parentTag != "" {
-		if err := s.store.AddTag(ctx, feed.ID, parentTag); err != nil {
-			s.logger.Warn("skip OPML tag", "tag", parentTag, "error", err)
+		if err := s.AddTag(ctx, feed.ID, parentTag); err != nil {
+			return 0, fmt.Errorf("tag OPML feed %s: %w", outline.XMLURL, err)
 		}
 	}
 
