@@ -29,7 +29,7 @@ func (s *Service) AddFeed(ctx context.Context, url string, titleOverride string)
 	fp := gofeed.NewParser()
 	parsed, err := fp.Parse(bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("parse feed %s: %w", url, err)
+		return nil, fmt.Errorf("%w: parse feed %s: %v", ErrInvalidFeed, url, err)
 	}
 
 	title := parsed.Title
@@ -69,6 +69,11 @@ func (s *Service) AddFeed(ctx context.Context, url string, titleOverride string)
 // It delegates directly to the store without additional business logic.
 func (s *Service) ListFeeds(ctx context.Context) ([]*Feed, error) {
 	return s.store.ListFeeds(ctx)
+}
+
+// GetFeed retrieves a single feed by its primary key.
+func (s *Service) GetFeed(ctx context.Context, id int64) (*Feed, error) {
+	return s.store.GetFeed(ctx, id)
 }
 
 // RemoveFeed deletes a feed and all of its associated entries (via cascade

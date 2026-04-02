@@ -78,3 +78,33 @@ func TestEntriesCmdJSON(t *testing.T) {
 		t.Errorf("expected JSON output: %s", out)
 	}
 }
+
+func TestEntriesCmdPageInfoJSON(t *testing.T) {
+	tsURL := setupTest(t)
+
+	_, _ = executeCommand("add", tsURL+"/feed.xml")
+	_, _ = executeCommand("fetch")
+
+	out, err := executeCommand("entries", "--limit", "1", "--page", "2", "--page-info", "--json")
+	if err != nil {
+		t.Fatalf("entries --page-info --json failed: %v", err)
+	}
+	if !strings.Contains(out, `"total_count"`) || !strings.Contains(out, `"has_more"`) {
+		t.Errorf("expected page metadata in output: %s", out)
+	}
+}
+
+func TestEntriesCmdPageInfoTable(t *testing.T) {
+	tsURL := setupTest(t)
+
+	_, _ = executeCommand("add", tsURL+"/feed.xml")
+	_, _ = executeCommand("fetch")
+
+	out, err := executeCommand("entries", "--limit", "1", "--page-info")
+	if err != nil {
+		t.Fatalf("entries --page-info failed: %v", err)
+	}
+	if !strings.Contains(out, "Showing 1/2 entries") {
+		t.Errorf("expected page footer in output: %s", out)
+	}
+}

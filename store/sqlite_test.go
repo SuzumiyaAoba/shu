@@ -206,6 +206,29 @@ func TestSQLiteBusyTimeout(t *testing.T) {
 	}
 }
 
+func TestNewSQLiteStoreWithOptions(t *testing.T) {
+	s, err := NewSQLiteStoreWithOptions(":memory:", &SQLiteOptions{
+		MaxOpenConns: 2,
+		BusyTimeout:  2 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("NewSQLiteStoreWithOptions failed: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	if got := s.db.Stats().MaxOpenConnections; got != 2 {
+		t.Fatalf("MaxOpenConnections = %d, want 2", got)
+	}
+
+	var timeout int
+	if err := s.db.QueryRow(`PRAGMA busy_timeout`).Scan(&timeout); err != nil {
+		t.Fatalf("query busy_timeout failed: %v", err)
+	}
+	if timeout != 2000 {
+		t.Fatalf("busy_timeout = %d, want 2000", timeout)
+	}
+}
+
 func TestAddEntries(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

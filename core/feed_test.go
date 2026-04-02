@@ -2,6 +2,7 @@ package core_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -159,6 +160,27 @@ func TestAddFeedInvalidURL(t *testing.T) {
 	_, err := svc.AddFeed(ctx, "not-a-url", "")
 	if err == nil {
 		t.Error("expected error for invalid URL")
+	}
+}
+
+func TestAddFeedInvalidDocument(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		io.WriteString(w, "<html>not a feed</html>")
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	svc := newTestService(t, nil)
+	svc.SetHTTPClient(ts.Client())
+	ctx := context.Background()
+
+	_, err := svc.AddFeed(ctx, ts.URL+"/index.html", "")
+	if err == nil {
+		t.Fatal("expected invalid feed error")
+	}
+	if !errors.Is(err, core.ErrInvalidFeed) {
+		t.Fatalf("expected ErrInvalidFeed, got %v", err)
 	}
 }
 

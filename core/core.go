@@ -115,14 +115,32 @@ type Service struct {
 	clientMu sync.RWMutex
 }
 
+// Option customizes a [Service] at construction time.
+type Option func(*Service)
+
+// WithHTTPClient configures the service to use the provided HTTP client.
+func WithHTTPClient(c *http.Client) Option {
+	return func(s *Service) {
+		s.SetHTTPClient(c)
+	}
+}
+
+// WithHTTPClientWithUserAgent configures the service to use the provided HTTP
+// client while preserving the shu User-Agent header.
+func WithHTTPClientWithUserAgent(c *http.Client) Option {
+	return func(s *Service) {
+		s.SetHTTPClientWithUserAgent(c)
+	}
+}
+
 // New creates a [Service] with the given store and logger.
 // The returned service uses an HTTP client with a 30-second timeout and a
 // custom transport that sets the User-Agent header to "shu/0.1".
-func New(store Store, logger *slog.Logger) *Service {
+func New(store Store, logger *slog.Logger, options ...Option) *Service {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	return &Service{
+	svc := &Service{
 		store:  store,
 		logger: logger,
 		client: &http.Client{
@@ -130,6 +148,12 @@ func New(store Store, logger *slog.Logger) *Service {
 			Transport: &userAgentTransport{base: http.DefaultTransport},
 		},
 	}
+	for _, option := range options {
+		if option != nil {
+			option(svc)
+		}
+	}
+	return svc
 }
 
 // SetHTTPClient replaces the service's HTTP client entirely.

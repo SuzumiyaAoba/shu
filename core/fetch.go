@@ -132,7 +132,7 @@ func (s *Service) fetchFeed(ctx context.Context, feed *Feed, notifier *fetchNoti
 	fp := gofeed.NewParser()
 	parsed, err := fp.Parse(bytes.NewReader(body))
 	if err != nil {
-		parseErr := fmt.Errorf("parse feed %s: %w", feed.URL, err)
+		parseErr := fmt.Errorf("%w: parse feed %s: %v", ErrInvalidFeed, feed.URL, err)
 		notifier.emit(FetchEvent{
 			Type:      FetchEventCompleted,
 			FeedID:    feed.ID,

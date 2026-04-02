@@ -19,14 +19,15 @@ type StoreOpener func(dsn string) (core.Store, error)
 
 // Config defines the runtime dependencies needed to bootstrap the application.
 type Config struct {
-	DBPath     string
-	LogLevel   string
-	LogOutput  io.Writer
-	Logger     *slog.Logger
-	Store      core.Store
-	OpenStore  StoreOpener
-	HTTPClient *http.Client
-	Cleanup    func() error
+	DBPath        string
+	LogLevel      string
+	LogOutput     io.Writer
+	Logger        *slog.Logger
+	Store         core.Store
+	OpenStore     StoreOpener
+	HTTPClient    *http.Client
+	SQLiteOptions *store.SQLiteOptions
+	Cleanup       func() error
 }
 
 // Instance contains the bootstrapped runtime objects shared by frontends.
@@ -54,10 +55,11 @@ func Open(cfg Config) (*Instance, error) {
 	}
 
 	closeFn := composeCleanup(ownedClose, cfg.Cleanup)
-	svc := core.New(dataStore, logger)
+	options := make([]core.Option, 0, 1)
 	if cfg.HTTPClient != nil {
-		svc.SetHTTPClientWithUserAgent(cfg.HTTPClient)
+		options = append(options, core.WithHTTPClientWithUserAgent(cfg.HTTPClient))
 	}
+	svc := core.New(dataStore, logger, options...)
 
 	return &Instance{
 		Service: svc,
@@ -70,6 +72,9 @@ func Open(cfg Config) (*Instance, error) {
 func validateConfig(cfg Config) error {
 	if cfg.Store != nil && cfg.OpenStore != nil {
 		return fmt.Errorf("config conflict: Store and OpenStore are mutually exclusive")
+	}
+	if cfg.SQLiteOptions != nil && (cfg.Store != nil || cfg.OpenStore != nil) {
+		return fmt.Errorf("config conflict: SQLiteOptions cannot be combined with Store or OpenStore")
 	}
 	if cfg.Logger != nil && (cfg.LogLevel != "" || cfg.LogOutput != nil) {
 		return fmt.Errorf("config conflict: Logger cannot be combined with LogLevel or LogOutput")
@@ -110,7 +115,7 @@ func openStore(cfg Config) (core.Store, func() error, error) {
 			return nil, nil, fmt.Errorf("create db directory: %w", err)
 		}
 		opener = func(dsn string) (core.Store, error) {
-			return store.NewSQLiteStore(dsn)
+			return store.NewSQLiteStoreWithOptions(dsn, cfg.SQLiteOptions)
 		}
 	}
 

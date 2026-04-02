@@ -122,6 +122,53 @@ func TestImportOPML(t *testing.T) {
 	}
 }
 
+func TestImportOPMLNestedCategoriesAddAllTags(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		io.WriteString(w, testRSSFeed)
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	svc := newTestService(t, nil)
+	svc.SetHTTPClient(ts.Client())
+	ctx := context.Background()
+
+	opmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="Tech">
+      <outline text="Go">
+        <outline text="Feed 1" type="rss" xmlUrl="` + ts.URL + `/feed1.xml"/>
+      </outline>
+    </outline>
+  </body>
+</opml>`
+
+	added, err := svc.ImportOPML(ctx, strings.NewReader(opmlDoc))
+	if err != nil {
+		t.Fatalf("ImportOPML failed: %v", err)
+	}
+	if added != 1 {
+		t.Fatalf("added = %d, want 1", added)
+	}
+
+	feed, err := svc.GetFeed(ctx, 1)
+	if err != nil {
+		t.Fatalf("GetFeed failed: %v", err)
+	}
+	tags, err := svc.ListTags(ctx, feed.ID)
+	if err != nil {
+		t.Fatalf("ListTags failed: %v", err)
+	}
+	if len(tags) != 2 {
+		t.Fatalf("got %d tags, want 2", len(tags))
+	}
+	if tags[0].Name != "Go" || tags[1].Name != "Tech" {
+		t.Fatalf("tags = %+v, want [Go Tech]", tags)
+	}
+}
+
 func TestImportOPMLDuplicateSkip(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
@@ -216,5 +263,18 @@ func TestImportOPMLReturnsAddFeedError(t *testing.T) {
 	}
 	if errors.Is(err, core.ErrFeedAlreadyExists) {
 		t.Fatalf("expected non-duplicate error, got %v", err)
+	}
+}
+
+func TestImportOPMLInvalidDocument(t *testing.T) {
+	svc := newTestService(t, nil)
+	ctx := context.Background()
+
+	_, err := svc.ImportOPML(ctx, strings.NewReader("<opml"))
+	if err == nil {
+		t.Fatal("expected invalid OPML error")
+	}
+	if !errors.Is(err, core.ErrInvalidOPML) {
+		t.Fatalf("expected ErrInvalidOPML, got %v", err)
 	}
 }

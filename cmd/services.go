@@ -23,6 +23,7 @@ type feedService interface {
 type entryService interface {
 	GetEntry(ctx context.Context, id int64) (*core.Entry, error)
 	ListEntries(ctx context.Context, filter core.EntryFilter) ([]*core.Entry, error)
+	ListEntriesPage(ctx context.Context, filter core.EntryFilter) (*core.EntryPage, error)
 	SearchEntries(ctx context.Context, query string, limit int) ([]*core.Entry, error)
 	FindDuplicateEntries(ctx context.Context, entryID int64) ([]*core.Entry, error)
 	MarkEntryRead(ctx context.Context, id int64) error

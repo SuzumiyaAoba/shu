@@ -27,6 +27,9 @@ func entryCommands(getService entryServiceGetter) []*cobra.Command {
 func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 	var entriesFeedID int64
 	var entriesLimit int
+	var entriesOffset int
+	var entriesPage int
+	var entriesPageInfo bool
 	var entriesJSON bool
 	var entriesYAML bool
 	var entriesUnread bool
@@ -42,9 +45,20 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if entriesPage < 0 {
+				return fmt.Errorf("--page must be >= 0")
+			}
+			if entriesOffset < 0 {
+				return fmt.Errorf("--offset must be >= 0")
+			}
+			offset := entriesOffset
+			if entriesPage > 0 {
+				offset = (entriesPage - 1) * entriesLimit
+			}
 
 			filter := core.EntryFilter{
 				Limit:       entriesLimit,
+				Offset:      offset,
 				UnreadOnly:  entriesUnread,
 				StarredOnly: entriesStarred,
 				Tag:         entriesTag,
@@ -53,37 +67,59 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 				filter.FeedID = &entriesFeedID
 			}
 
-			entries, err := svc.ListEntries(cmd.Context(), filter)
+			page, err := svc.ListEntriesPage(cmd.Context(), filter)
 			if err != nil {
 				return err
 			}
 
 			if entriesJSON {
-				return writeJSON(cmd.OutOrStdout(), entries)
+				if entriesPageInfo {
+					return writeJSON(cmd.OutOrStdout(), page)
+				}
+				return writeJSON(cmd.OutOrStdout(), page.Entries)
 			}
 			if entriesYAML {
-				return writeYAML(cmd.OutOrStdout(), entries)
+				if entriesPageInfo {
+					return writeYAML(cmd.OutOrStdout(), page)
+				}
+				return writeYAML(cmd.OutOrStdout(), page.Entries)
 			}
 
 			if entriesFormat == "markdown" {
-				return renderEntriesMarkdown(cmd, entries)
+				if err := renderEntriesMarkdown(cmd, page.Entries); err != nil {
+					return err
+				}
+			} else {
+				w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+				fmt.Fprintln(w, "ID\tFEED\tTITLE\tLINK\tPUBLISHED")
+				for _, e := range page.Entries {
+					pub := "-"
+					if e.PublishedAt != nil {
+						pub = e.PublishedAt.Format("2006-01-02 15:04")
+					}
+					fmt.Fprintf(w, "%d\t%d\t%s\t%s\t%s\n", e.ID, e.FeedID, e.Title, e.Link, pub)
+				}
+				if err := w.Flush(); err != nil {
+					return err
+				}
 			}
 
-			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tFEED\tTITLE\tLINK\tPUBLISHED")
-			for _, e := range entries {
-				pub := "-"
-				if e.PublishedAt != nil {
-					pub = e.PublishedAt.Format("2006-01-02 15:04")
+			if entriesPageInfo {
+				fmt.Fprintf(cmd.OutOrStdout(), "Showing %d/%d entries", len(page.Entries), page.TotalCount)
+				if page.HasMore {
+					fmt.Fprintf(cmd.OutOrStdout(), " (next offset: %d)", page.Offset+len(page.Entries))
 				}
-				fmt.Fprintf(w, "%d\t%d\t%s\t%s\t%s\n", e.ID, e.FeedID, e.Title, e.Link, pub)
+				fmt.Fprintln(cmd.OutOrStdout())
 			}
-			return w.Flush()
+			return nil
 		},
 	}
 
 	entriesCmd.Flags().Int64Var(&entriesFeedID, "feed-id", 0, "filter by feed ID")
 	entriesCmd.Flags().IntVar(&entriesLimit, "limit", 20, "max entries to show")
+	entriesCmd.Flags().IntVar(&entriesOffset, "offset", 0, "skip the first N entries")
+	entriesCmd.Flags().IntVar(&entriesPage, "page", 0, "1-based page number (uses --limit)")
+	entriesCmd.Flags().BoolVar(&entriesPageInfo, "page-info", false, "include pagination metadata")
 	entriesCmd.Flags().BoolVar(&entriesJSON, "json", false, "output as JSON")
 	entriesCmd.Flags().BoolVar(&entriesYAML, "yaml", false, "output as YAML")
 	entriesCmd.Flags().BoolVar(&entriesUnread, "unread", false, "show only unread entries")
@@ -91,6 +127,7 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 	entriesCmd.Flags().StringVar(&entriesTag, "tag", "", "filter by feed tag")
 	entriesCmd.Flags().StringVar(&entriesFormat, "format", "", "output format: markdown")
 	entriesCmd.MarkFlagsMutuallyExclusive("json", "yaml")
+	entriesCmd.MarkFlagsMutuallyExclusive("offset", "page")
 	return entriesCmd
 }
 

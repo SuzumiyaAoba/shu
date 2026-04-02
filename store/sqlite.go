@@ -16,6 +16,12 @@ import (
 
 const sqliteConstraintUnique = 2067
 
+// SQLiteOptions controls runtime settings for [SQLiteStore].
+type SQLiteOptions struct {
+	MaxOpenConns int
+	BusyTimeout  time.Duration
+}
+
 // migrationsFS embeds all SQL migration files from the migrations directory.
 // Files are named with a numeric prefix (e.g. 001_, 002_) and executed in
 // lexicographic order. Each migration runs at most once, tracked by the
@@ -82,20 +88,37 @@ type SQLiteStore struct {
 //
 // If any step fails, the database is closed and an error is returned.
 func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
+	return NewSQLiteStoreWithOptions(dsn, nil)
+}
+
+// NewSQLiteStoreWithOptions opens (or creates) a SQLite database using the
+// provided options.
+func NewSQLiteStoreWithOptions(dsn string, options *SQLiteOptions) (*SQLiteStore, error) {
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
+	maxOpenConns := 1
+	busyTimeout := 5 * time.Second
+	if options != nil {
+		if options.MaxOpenConns > 0 {
+			maxOpenConns = options.MaxOpenConns
+		}
+		if options.BusyTimeout > 0 {
+			busyTimeout = options.BusyTimeout
+		}
+	}
+
 	// SQLite supports limited concurrency. Use a single connection to avoid
 	// "database is locked" errors, especially with in-memory databases.
-	db.SetMaxOpenConns(1)
+	db.SetMaxOpenConns(maxOpenConns)
 
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("set journal mode: %w", err)
 	}
-	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+	if _, err := db.Exec(fmt.Sprintf("PRAGMA busy_timeout=%d", busyTimeout/time.Millisecond)); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("set busy timeout: %w", err)
 	}

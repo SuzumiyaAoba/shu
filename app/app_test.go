@@ -143,6 +143,17 @@ func TestOpenRejectsConflictingStoreConfig(t *testing.T) {
 	}
 }
 
+func TestOpenRejectsConflictingSQLiteOptions(t *testing.T) {
+	_, err := Open(Config{
+		DBPath:        ":memory:",
+		Store:         newFakeStore(),
+		SQLiteOptions: &store.SQLiteOptions{BusyTimeout: time.Second},
+	})
+	if err == nil {
+		t.Fatal("expected Store/SQLiteOptions conflict")
+	}
+}
+
 func TestOpenRejectsConflictingLoggerConfig(t *testing.T) {
 	_, err := Open(Config{
 		DBPath:    ":memory:",
@@ -161,6 +172,22 @@ func TestOpenRequiresDBPathWithoutStore(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing DBPath error")
 	}
+}
+
+func TestOpenWithSQLiteOptions(t *testing.T) {
+	instance, err := Open(Config{
+		DBPath:   ":memory:",
+		LogLevel: "info",
+		SQLiteOptions: &store.SQLiteOptions{
+			BusyTimeout:  2 * time.Second,
+			MaxOpenConns: 2,
+		},
+		LogOutput: new(bytes.Buffer),
+	})
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	t.Cleanup(func() { _ = instance.Close() })
 }
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
