@@ -16,6 +16,7 @@ func feedCommands(getService feedServiceGetter) []*cobra.Command {
 		newDiscoverCmd(getService),
 		newUpdateCmd(getService),
 		newRemoveCmd(getService),
+		newRemoveDeadFeedsCmd(getService),
 		newEnableCmd(getService),
 		newDisableCmd(getService),
 	)
@@ -312,4 +313,57 @@ func newDisableCmd(getService feedServiceGetter) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newRemoveDeadFeedsCmd(getService feedServiceGetter) *cobra.Command {
+	var dryRun bool
+	var outputJSON bool
+	var outputYAML bool
+
+	removeDeadCmd := &cobra.Command{
+		Use:   "remove-dead-feeds",
+		Short: "Remove feeds auto-disabled by repeated fetch failures",
+		Long:  "Remove feeds considered dead: disabled feeds with recorded fetch errors. Manually disabled feeds are not removed.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := getService()
+			if err != nil {
+				return err
+			}
+
+			var feeds []*core.Feed
+			if dryRun {
+				feeds, err = svc.ListDeadFeeds(cmd.Context())
+			} else {
+				feeds, err = svc.RemoveDeadFeeds(cmd.Context())
+			}
+			if err != nil {
+				return err
+			}
+
+			if outputJSON {
+				return writeJSON(cmd.OutOrStdout(), feeds)
+			}
+			if outputYAML {
+				return writeYAML(cmd.OutOrStdout(), feeds)
+			}
+
+			if len(feeds) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "No dead feeds found.")
+				return nil
+			}
+
+			if dryRun {
+				fmt.Fprintf(cmd.OutOrStdout(), "Would remove %d dead feeds\n", len(feeds))
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Removed %d dead feeds\n", len(feeds))
+			return nil
+		},
+	}
+
+	removeDeadCmd.Flags().BoolVar(&dryRun, "dry-run", false, "show dead feeds without removing them")
+	removeDeadCmd.Flags().BoolVar(&outputJSON, "json", false, "output as JSON")
+	removeDeadCmd.Flags().BoolVar(&outputYAML, "yaml", false, "output as YAML")
+	removeDeadCmd.MarkFlagsMutuallyExclusive("json", "yaml")
+	return removeDeadCmd
 }

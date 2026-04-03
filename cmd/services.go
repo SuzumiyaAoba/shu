@@ -10,6 +10,7 @@ import (
 
 type feedService interface {
 	AddFeed(ctx context.Context, url string, titleOverride string) (*core.Feed, error)
+	ListDeadFeeds(ctx context.Context) ([]*core.Feed, error)
 	ListFeeds(ctx context.Context) ([]*core.Feed, error)
 	FetchFeed(ctx context.Context, feedID int64) ([]*core.Entry, error)
 	FetchAll(ctx context.Context) (int, error)
@@ -18,6 +19,7 @@ type feedService interface {
 	RemoveFeed(ctx context.Context, id int64) error
 	EnableFeed(ctx context.Context, id int64) error
 	DisableFeed(ctx context.Context, id int64) error
+	RemoveDeadFeeds(ctx context.Context) ([]*core.Feed, error)
 }
 
 type entryService interface {
