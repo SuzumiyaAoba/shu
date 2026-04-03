@@ -45,15 +45,9 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if entriesPage < 0 {
-				return fmt.Errorf("--page must be >= 0")
-			}
-			if entriesOffset < 0 {
-				return fmt.Errorf("--offset must be >= 0")
-			}
-			offset := entriesOffset
-			if entriesPage > 0 {
-				offset = (entriesPage - 1) * entriesLimit
+			offset, err := resolvePageOffset(entriesLimit, entriesOffset, entriesPage)
+			if err != nil {
+				return err
 			}
 
 			filter := core.EntryFilter{
@@ -72,17 +66,8 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 				return err
 			}
 
-			if entriesJSON {
-				if entriesPageInfo {
-					return writeJSON(cmd.OutOrStdout(), page)
-				}
-				return writeJSON(cmd.OutOrStdout(), page.Entries)
-			}
-			if entriesYAML {
-				if entriesPageInfo {
-					return writeYAML(cmd.OutOrStdout(), page)
-				}
-				return writeYAML(cmd.OutOrStdout(), page.Entries)
+			if handled, err := writeEntryPageStructuredOutput(cmd.OutOrStdout(), page, entriesPageInfo, entriesJSON, entriesYAML); handled || err != nil {
+				return err
 			}
 
 			if entriesFormat == "markdown" {
@@ -105,11 +90,7 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 			}
 
 			if entriesPageInfo {
-				fmt.Fprintf(cmd.OutOrStdout(), "Showing %d/%d entries", len(page.Entries), page.TotalCount)
-				if page.HasMore {
-					fmt.Fprintf(cmd.OutOrStdout(), " (next offset: %d)", page.Offset+len(page.Entries))
-				}
-				fmt.Fprintln(cmd.OutOrStdout())
+				return writeEntryPageSummary(cmd.OutOrStdout(), page, "entries")
 			}
 			return nil
 		},
@@ -342,16 +323,10 @@ func newSearchCmd(getService entryServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if searchPage < 0 {
-				return fmt.Errorf("--page must be >= 0")
-			}
-			if searchOffset < 0 {
-				return fmt.Errorf("--offset must be >= 0")
-			}
 			query := strings.Join(args, " ")
-			offset := searchOffset
-			if searchPage > 0 {
-				offset = (searchPage - 1) * searchLimit
+			offset, err := resolvePageOffset(searchLimit, searchOffset, searchPage)
+			if err != nil {
+				return err
 			}
 
 			page, err := svc.SearchEntriesPage(cmd.Context(), query, searchLimit, offset)
@@ -359,17 +334,8 @@ func newSearchCmd(getService entryServiceGetter) *cobra.Command {
 				return err
 			}
 
-			if searchJSON {
-				if searchPageInfo {
-					return writeJSON(cmd.OutOrStdout(), page)
-				}
-				return writeJSON(cmd.OutOrStdout(), page.Entries)
-			}
-			if searchYAML {
-				if searchPageInfo {
-					return writeYAML(cmd.OutOrStdout(), page)
-				}
-				return writeYAML(cmd.OutOrStdout(), page.Entries)
+			if handled, err := writeEntryPageStructuredOutput(cmd.OutOrStdout(), page, searchPageInfo, searchJSON, searchYAML); handled || err != nil {
+				return err
 			}
 
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
@@ -381,11 +347,7 @@ func newSearchCmd(getService entryServiceGetter) *cobra.Command {
 				return err
 			}
 			if searchPageInfo {
-				fmt.Fprintf(cmd.OutOrStdout(), "Showing %d/%d results", len(page.Entries), page.TotalCount)
-				if page.HasMore {
-					fmt.Fprintf(cmd.OutOrStdout(), " (next offset: %d)", page.Offset+len(page.Entries))
-				}
-				fmt.Fprintln(cmd.OutOrStdout())
+				return writeEntryPageSummary(cmd.OutOrStdout(), page, "results")
 			}
 			return nil
 		},

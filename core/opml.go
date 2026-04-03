@@ -133,15 +133,8 @@ func (s *Service) ImportOPML(ctx context.Context, r io.Reader) (int, error) {
 		return 0, err
 	}
 
-	added := 0
-	for _, outline := range opml.Body.Outlines {
-		n, err := s.importOutlineStrict(ctx, outline, nil)
-		if err != nil {
-			return added, err
-		}
-		added += n
-	}
-	return added, nil
+	importer := newOPMLImporter(s, nil)
+	return importer.importAll(ctx, opml.Body.Outlines)
 }
 
 // ImportOPMLDetailed imports an OPML document and returns a detailed summary of
@@ -153,12 +146,9 @@ func (s *Service) ImportOPMLDetailed(ctx context.Context, r io.Reader) (*OPMLImp
 	}
 
 	result := &OPMLImportResult{}
-	for _, outline := range opml.Body.Outlines {
-		if err := s.importOutline(ctx, outline, nil, result); err != nil {
-			return result, err
-		}
-	}
-	return result, nil
+	importer := newOPMLImporter(s, result)
+	_, err = importer.importAll(ctx, opml.Body.Outlines)
+	return result, err
 }
 
 func decodeOPML(r io.Reader) (*OPML, error) {
@@ -169,7 +159,28 @@ func decodeOPML(r io.Reader) (*OPML, error) {
 	return &opml, nil
 }
 
-func (s *Service) importOutlineStrict(ctx context.Context, outline OPMLOutline, parentTags []string) (int, error) {
+type opmlImporter struct {
+	service *Service
+	result  *OPMLImportResult
+}
+
+func newOPMLImporter(service *Service, result *OPMLImportResult) *opmlImporter {
+	return &opmlImporter{service: service, result: result}
+}
+
+func (i *opmlImporter) importAll(ctx context.Context, outlines []OPMLOutline) (int, error) {
+	added := 0
+	for _, outline := range outlines {
+		n, err := i.importOutline(ctx, outline, nil)
+		if err != nil {
+			return added, err
+		}
+		added += n
+	}
+	return added, nil
+}
+
+func (i *opmlImporter) importOutline(ctx context.Context, outline OPMLOutline, parentTags []string) (int, error) {
 	if len(outline.Outlines) > 0 {
 		tag := outline.Text
 		if tag == "" {
@@ -181,7 +192,7 @@ func (s *Service) importOutlineStrict(ctx context.Context, outline OPMLOutline, 
 		}
 		added := 0
 		for _, child := range outline.Outlines {
-			n, err := s.importOutlineStrict(ctx, child, tags)
+			n, err := i.importOutline(ctx, child, tags)
 			if err != nil {
 				return added, err
 			}
@@ -199,105 +210,68 @@ func (s *Service) importOutlineStrict(ctx context.Context, outline OPMLOutline, 
 		title = outline.Text
 	}
 
-	feed, err := s.AddFeed(ctx, outline.XMLURL, title)
+	feed, added, err := i.ensureFeed(ctx, outline.XMLURL, title)
 	if err != nil {
-		if errors.Is(err, ErrFeedAlreadyExists) {
-			s.logger.Info("reuse duplicate OPML feed", "url", outline.XMLURL)
-			existingFeed, getErr := s.store.GetFeedByURL(ctx, outline.XMLURL)
-			if getErr != nil {
-				return 0, fmt.Errorf("get duplicate OPML feed %s: %w", outline.XMLURL, getErr)
-			}
-			if err := s.applyTagsStrict(ctx, existingFeed.ID, outline.XMLURL, parentTags); err != nil {
-				return 0, err
-			}
-			return 0, nil
-		}
-		return 0, fmt.Errorf("add OPML feed %s: %w", outline.XMLURL, err)
-	}
-
-	if err := s.applyTagsStrict(ctx, feed.ID, outline.XMLURL, parentTags); err != nil {
 		return 0, err
 	}
-	return 1, nil
+	if feed == nil {
+		return 0, nil
+	}
+
+	if err := i.applyTags(ctx, feed.ID, outline.XMLURL, parentTags); err != nil {
+		return added, err
+	}
+	return added, nil
 }
 
-func (s *Service) importOutline(ctx context.Context, outline OPMLOutline, parentTags []string, result *OPMLImportResult) error {
-	// If this outline has children, treat it as a category.
-	if len(outline.Outlines) > 0 {
-		tag := outline.Text
-		if tag == "" {
-			tag = outline.Title
+func (i *opmlImporter) ensureFeed(ctx context.Context, url, title string) (*Feed, int, error) {
+	feed, err := i.service.AddFeed(ctx, url, title)
+	if err == nil {
+		if i.result != nil {
+			i.result.AddedCount++
 		}
-		tags := parentTags
-		if tag != "" {
-			tags = append(append([]string{}, parentTags...), tag)
-		}
-		for _, child := range outline.Outlines {
-			if err := s.importOutline(ctx, child, tags, result); err != nil {
-				return err
-			}
-		}
-		return nil
+		return feed, 1, nil
 	}
 
-	// Leaf outline — treat as a feed.
-	if outline.XMLURL == "" {
-		return nil
-	}
-
-	title := outline.Title
-	if title == "" {
-		title = outline.Text
-	}
-
-	feed, err := s.AddFeed(ctx, outline.XMLURL, title)
-	if err != nil {
-		if errors.Is(err, ErrFeedAlreadyExists) {
-			s.logger.Info("reuse duplicate OPML feed", "url", outline.XMLURL)
-			result.ReusedCount++
-			existingFeed, getErr := s.store.GetFeedByURL(ctx, outline.XMLURL)
-			if getErr != nil {
-				return fmt.Errorf("get duplicate OPML feed %s: %w", outline.XMLURL, getErr)
-			}
-			if tagErr := s.applyTags(ctx, existingFeed.ID, outline.XMLURL, parentTags, result); tagErr != nil {
-				result.Issues = append(result.Issues, OPMLImportIssue{
-					URL:   outline.XMLURL,
-					Error: tagErr.Error(),
-				})
-			}
-			return nil
+	if errors.Is(err, ErrFeedAlreadyExists) {
+		i.service.logger.Info("reuse duplicate OPML feed", "url", url)
+		if i.result != nil {
+			i.result.ReusedCount++
 		}
-		result.Issues = append(result.Issues, OPMLImportIssue{
-			URL:   outline.XMLURL,
+		existingFeed, getErr := i.service.store.GetFeedByURL(ctx, url)
+		if getErr != nil {
+			return nil, 0, fmt.Errorf("get duplicate OPML feed %s: %w", url, getErr)
+		}
+		return existingFeed, 0, nil
+	}
+
+	if i.result != nil {
+		i.result.Issues = append(i.result.Issues, OPMLImportIssue{
+			URL:   url,
 			Error: err.Error(),
 		})
-		return nil
+		return nil, 0, nil
 	}
-	result.AddedCount++
 
-	if tagErr := s.applyTags(ctx, feed.ID, outline.XMLURL, parentTags, result); tagErr != nil {
-		result.Issues = append(result.Issues, OPMLImportIssue{
-			URL:   outline.XMLURL,
-			Error: tagErr.Error(),
-		})
-	}
-	return nil
+	return nil, 0, fmt.Errorf("add OPML feed %s: %w", url, err)
 }
 
-func (s *Service) applyTags(ctx context.Context, feedID int64, feedURL string, tags []string, result *OPMLImportResult) error {
+func (i *opmlImporter) applyTags(ctx context.Context, feedID int64, feedURL string, tags []string) error {
 	for _, tag := range tags {
-		if err := s.AddTag(ctx, feedID, tag); err != nil {
-			return fmt.Errorf("%w: tag OPML feed %s with %q: %v", ErrTagApplyFailed, feedURL, tag, err)
+		if err := i.service.AddTag(ctx, feedID, tag); err != nil {
+			tagErr := fmt.Errorf("%w: tag OPML feed %s with %q: %v", ErrTagApplyFailed, feedURL, tag, err)
+			if i.result != nil {
+				i.result.Issues = append(i.result.Issues, OPMLImportIssue{
+					URL:   feedURL,
+					Tag:   tag,
+					Error: tagErr.Error(),
+				})
+				return nil
+			}
+			return tagErr
 		}
-		result.TaggedCount++
-	}
-	return nil
-}
-
-func (s *Service) applyTagsStrict(ctx context.Context, feedID int64, feedURL string, tags []string) error {
-	for _, tag := range tags {
-		if err := s.AddTag(ctx, feedID, tag); err != nil {
-			return fmt.Errorf("%w: tag OPML feed %s with %q: %v", ErrTagApplyFailed, feedURL, tag, err)
+		if i.result != nil {
+			i.result.TaggedCount++
 		}
 	}
 	return nil
