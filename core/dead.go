@@ -2,7 +2,7 @@ package core
 
 import "context"
 
-// ListDeadFeeds returns feeds that are disabled due to fetch failures.
+// ListDeadFeeds returns feeds with recorded fetch failures.
 // Manually disabled feeds without recorded errors are excluded.
 func (s *Service) ListDeadFeeds(ctx context.Context) ([]*Feed, error) {
 	feeds, err := s.store.ListFeeds(ctx)
@@ -12,15 +12,15 @@ func (s *Service) ListDeadFeeds(ctx context.Context) ([]*Feed, error) {
 
 	dead := make([]*Feed, 0)
 	for _, feed := range feeds {
-		if feed.Disabled && feed.ErrorCount > 0 {
+		if feed.ErrorCount > 0 {
 			dead = append(dead, feed)
 		}
 	}
 	return dead, nil
 }
 
-// RemoveDeadFeeds deletes feeds that are disabled due to fetch failures and
-// returns the removed feeds.
+// RemoveDeadFeeds deletes feeds with recorded fetch failures and returns the
+// removed feeds.
 func (s *Service) RemoveDeadFeeds(ctx context.Context) ([]*Feed, error) {
 	dead, err := s.ListDeadFeeds(ctx)
 	if err != nil {

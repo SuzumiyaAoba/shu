@@ -31,18 +31,23 @@ func TestListDeadFeeds(t *testing.T) {
 	ctx := context.Background()
 
 	deadFeed, _ := svc.AddFeed(ctx, ts.URL+"/dead.xml", "Dead Feed")
+	errFeed, _ := svc.AddFeed(ctx, ts.URL+"/err.xml", "Err Feed")
 	manualFeed, _ := svc.AddFeed(ctx, ts.URL+"/manual.xml", "Manual Feed")
 	for i := 0; i < 5; i++ {
 		_ = st.RecordFeedError(ctx, deadFeed.ID, "timeout")
 	}
+	_ = st.RecordFeedError(ctx, errFeed.ID, "timeout")
 	_ = svc.DisableFeed(ctx, manualFeed.ID)
 
 	dead, err := svc.ListDeadFeeds(ctx)
 	if err != nil {
 		t.Fatalf("ListDeadFeeds failed: %v", err)
 	}
-	if len(dead) != 1 || dead[0].ID != deadFeed.ID {
-		t.Fatalf("dead feeds = %+v, want [%d]", dead, deadFeed.ID)
+	if len(dead) != 2 {
+		t.Fatalf("dead feeds = %+v, want 2 feeds", dead)
+	}
+	if dead[0].ID != deadFeed.ID || dead[1].ID != errFeed.ID {
+		t.Fatalf("dead feeds = %+v, want [%d %d]", dead, deadFeed.ID, errFeed.ID)
 	}
 }
 
@@ -65,18 +70,20 @@ func TestRemoveDeadFeeds(t *testing.T) {
 	ctx := context.Background()
 
 	deadFeed, _ := svc.AddFeed(ctx, ts.URL+"/dead.xml", "Dead Feed")
+	errFeed, _ := svc.AddFeed(ctx, ts.URL+"/err.xml", "Err Feed")
 	aliveFeed, _ := svc.AddFeed(ctx, ts.URL+"/alive.xml", "Alive Feed")
 
 	for i := 0; i < 5; i++ {
 		_ = st.RecordFeedError(ctx, deadFeed.ID, "timeout")
 	}
+	_ = st.RecordFeedError(ctx, errFeed.ID, "timeout")
 
 	removed, err := svc.RemoveDeadFeeds(ctx)
 	if err != nil {
 		t.Fatalf("RemoveDeadFeeds failed: %v", err)
 	}
-	if len(removed) != 1 || removed[0].ID != deadFeed.ID {
-		t.Fatalf("removed = %+v, want [%d]", removed, deadFeed.ID)
+	if len(removed) != 2 {
+		t.Fatalf("removed = %+v, want 2 feeds", removed)
 	}
 
 	feeds, err := svc.ListFeeds(ctx)

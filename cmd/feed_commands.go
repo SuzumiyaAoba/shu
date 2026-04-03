@@ -322,8 +322,8 @@ func newRemoveDeadFeedsCmd(getService feedServiceGetter) *cobra.Command {
 
 	removeDeadCmd := &cobra.Command{
 		Use:   "remove-dead-feeds",
-		Short: "Remove feeds auto-disabled by repeated fetch failures",
-		Long:  "Remove feeds considered dead: disabled feeds with recorded fetch errors. Manually disabled feeds are not removed.",
+		Short: "Remove feeds with recorded fetch failures",
+		Long:  "Remove feeds considered dead: feeds with recorded fetch errors. Manually disabled feeds without errors are not removed.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			svc, err := getService()
 			if err != nil {
