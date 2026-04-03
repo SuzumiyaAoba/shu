@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/SuzumiyaAoba/shu/core"
@@ -28,8 +29,7 @@ func feedCommands(getService feedServiceGetter) []*cobra.Command {
 // the user-supplied title is stored instead of the one from the feed document.
 func newAddCmd(getService feedServiceGetter) *cobra.Command {
 	var addTitle string
-	var addJSON bool
-	var addYAML bool
+	var output structuredOutputOptions
 
 	addCmd := &cobra.Command{
 		Use:   "add <url>",
@@ -45,7 +45,7 @@ func newAddCmd(getService feedServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if handled, err := writeStructuredOutput(cmd.OutOrStdout(), feed, addJSON, addYAML); handled || err != nil {
+			if handled, err := output.write(cmd.OutOrStdout(), feed); handled || err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Added feed #%d: %s (%s)\n", feed.ID, feed.Title, feed.URL)
@@ -54,14 +54,13 @@ func newAddCmd(getService feedServiceGetter) *cobra.Command {
 	}
 
 	addCmd.Flags().StringVar(&addTitle, "title", "", "override feed title")
-	addStructuredOutputFlags(addCmd, &addJSON, &addYAML)
+	addStructuredOutputFlags(addCmd, &output.JSON, &output.YAML)
 	return addCmd
 }
 
 // newListCmd implements "shu list".
 func newListCmd(getService feedServiceGetter) *cobra.Command {
-	var listJSON bool
-	var listYAML bool
+	var output structuredOutputOptions
 
 	listCmd := &cobra.Command{
 		Use:   "list",
@@ -76,22 +75,20 @@ func newListCmd(getService feedServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if handled, err := writeStructuredOutput(cmd.OutOrStdout(), feeds, listJSON, listYAML); handled || err != nil {
-				return err
-			}
-			return renderFeedsTable(cmd.OutOrStdout(), feeds)
+			return output.renderOrWrite(cmd.OutOrStdout(), feeds, func() error {
+				return renderFeedsTable(cmd.OutOrStdout(), feeds)
+			})
 		},
 	}
 
-	addStructuredOutputFlags(listCmd, &listJSON, &listYAML)
+	addStructuredOutputFlags(listCmd, &output.JSON, &output.YAML)
 	return listCmd
 }
 
 // newFetchCmd implements "shu fetch".
 func newFetchCmd(getService feedServiceGetter) *cobra.Command {
 	var fetchFeedID int64
-	var fetchJSON bool
-	var fetchYAML bool
+	var output structuredOutputOptions
 
 	fetchCmd := &cobra.Command{
 		Use:   "fetch",
@@ -109,7 +106,7 @@ func newFetchCmd(getService feedServiceGetter) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if handled, err := writeStructuredOutput(cmd.OutOrStdout(), entries, fetchJSON, fetchYAML); handled || err != nil {
+				if handled, err := output.write(cmd.OutOrStdout(), entries); handled || err != nil {
 					return err
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries from feed #%d\n", len(entries), fetchFeedID)
@@ -120,7 +117,7 @@ func newFetchCmd(getService feedServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if handled, err := writeStructuredOutput(cmd.OutOrStdout(), map[string]int{"count": count}, fetchJSON, fetchYAML); handled || err != nil {
+			if handled, err := output.write(cmd.OutOrStdout(), map[string]int{"count": count}); handled || err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count)
@@ -129,13 +126,12 @@ func newFetchCmd(getService feedServiceGetter) *cobra.Command {
 	}
 
 	fetchCmd.Flags().Int64Var(&fetchFeedID, "feed-id", 0, "fetch a specific feed by ID")
-	addStructuredOutputFlags(fetchCmd, &fetchJSON, &fetchYAML)
+	addStructuredOutputFlags(fetchCmd, &output.JSON, &output.YAML)
 	return fetchCmd
 }
 
 func newDiscoverCmd(getService feedServiceGetter) *cobra.Command {
-	var discoverJSON bool
-	var discoverYAML bool
+	var output structuredOutputOptions
 
 	discoverCmd := &cobra.Command{
 		Use:   "discover <url>",
@@ -150,22 +146,22 @@ func newDiscoverCmd(getService feedServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if handled, err := writeStructuredOutput(cmd.OutOrStdout(), feeds, discoverJSON, discoverYAML); handled || err != nil {
-				return err
-			}
-
-			if len(feeds) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No feeds found.")
+			return output.renderOrWrite(cmd.OutOrStdout(), feeds, func() error {
+				if len(feeds) == 0 {
+					_, err := fmt.Fprintln(cmd.OutOrStdout(), "No feeds found.")
+					return err
+				}
+				for _, u := range feeds {
+					if _, err := fmt.Fprintln(cmd.OutOrStdout(), u); err != nil {
+						return err
+					}
+				}
 				return nil
-			}
-			for _, u := range feeds {
-				fmt.Fprintln(cmd.OutOrStdout(), u)
-			}
-			return nil
+			})
 		},
 	}
 
-	addStructuredOutputFlags(discoverCmd, &discoverJSON, &discoverYAML)
+	addStructuredOutputFlags(discoverCmd, &output.JSON, &output.YAML)
 	return discoverCmd
 }
 
@@ -178,15 +174,6 @@ func newUpdateCmd(getService feedServiceGetter) *cobra.Command {
 		Short: "Update a feed's title or URL",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, err := getService()
-			if err != nil {
-				return err
-			}
-			id, err := parseIDArg(args[0])
-			if err != nil {
-				return err
-			}
-
 			update := core.FeedUpdate{}
 			if cmd.Flags().Changed("title") {
 				update.Title = &updateTitle
@@ -195,11 +182,9 @@ func newUpdateCmd(getService feedServiceGetter) *cobra.Command {
 				update.URL = &updateURL
 			}
 
-			if err := svc.UpdateFeed(cmd.Context(), id, update); err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Updated feed #%d\n", id)
-			return nil
+			return runSingleIDCommand(cmd, args, getService, func(svc feedService, ctx context.Context, id int64) error {
+				return svc.UpdateFeed(ctx, id, update)
+			}, "Updated feed #%d\n")
 		},
 	}
 
@@ -215,19 +200,9 @@ func newRemoveCmd(getService feedServiceGetter) *cobra.Command {
 		Short: "Remove a feed and its entries",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, err := getService()
-			if err != nil {
-				return err
-			}
-			id, err := parseIDArg(args[0])
-			if err != nil {
-				return err
-			}
-			if err := svc.RemoveFeed(cmd.Context(), id); err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Removed feed #%d\n", id)
-			return nil
+			return runSingleIDCommand(cmd, args, getService, func(svc feedService, ctx context.Context, id int64) error {
+				return svc.RemoveFeed(ctx, id)
+			}, "Removed feed #%d\n")
 		},
 	}
 }
@@ -238,19 +213,9 @@ func newEnableCmd(getService feedServiceGetter) *cobra.Command {
 		Short: "Re-enable a disabled feed",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, err := getService()
-			if err != nil {
-				return err
-			}
-			id, err := parseIDArg(args[0])
-			if err != nil {
-				return err
-			}
-			if err := svc.EnableFeed(cmd.Context(), id); err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Enabled feed #%d\n", id)
-			return nil
+			return runSingleIDCommand(cmd, args, getService, func(svc feedService, ctx context.Context, id int64) error {
+				return svc.EnableFeed(ctx, id)
+			}, "Enabled feed #%d\n")
 		},
 	}
 }
@@ -261,27 +226,16 @@ func newDisableCmd(getService feedServiceGetter) *cobra.Command {
 		Short: "Disable a feed (skip during fetch)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, err := getService()
-			if err != nil {
-				return err
-			}
-			id, err := parseIDArg(args[0])
-			if err != nil {
-				return err
-			}
-			if err := svc.DisableFeed(cmd.Context(), id); err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Disabled feed #%d\n", id)
-			return nil
+			return runSingleIDCommand(cmd, args, getService, func(svc feedService, ctx context.Context, id int64) error {
+				return svc.DisableFeed(ctx, id)
+			}, "Disabled feed #%d\n")
 		},
 	}
 }
 
 func newRemoveDeadFeedsCmd(getService feedServiceGetter) *cobra.Command {
 	var dryRun bool
-	var outputJSON bool
-	var outputYAML bool
+	var output structuredOutputOptions
 
 	removeDeadCmd := &cobra.Command{
 		Use:   "remove-dead-feeds",
@@ -302,25 +256,22 @@ func newRemoveDeadFeedsCmd(getService feedServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if handled, err := writeStructuredOutput(cmd.OutOrStdout(), feeds, outputJSON, outputYAML); handled || err != nil {
+			return output.renderOrWrite(cmd.OutOrStdout(), feeds, func() error {
+				if len(feeds) == 0 {
+					_, err := fmt.Fprintln(cmd.OutOrStdout(), "No dead feeds found.")
+					return err
+				}
+				if dryRun {
+					_, err := fmt.Fprintf(cmd.OutOrStdout(), "Would remove %d dead feeds\n", len(feeds))
+					return err
+				}
+				_, err := fmt.Fprintf(cmd.OutOrStdout(), "Removed %d dead feeds\n", len(feeds))
 				return err
-			}
-
-			if len(feeds) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No dead feeds found.")
-				return nil
-			}
-
-			if dryRun {
-				fmt.Fprintf(cmd.OutOrStdout(), "Would remove %d dead feeds\n", len(feeds))
-				return nil
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Removed %d dead feeds\n", len(feeds))
-			return nil
+			})
 		},
 	}
 
 	removeDeadCmd.Flags().BoolVar(&dryRun, "dry-run", false, "show dead feeds without removing them")
-	addStructuredOutputFlags(removeDeadCmd, &outputJSON, &outputYAML)
+	addStructuredOutputFlags(removeDeadCmd, &output.JSON, &output.YAML)
 	return removeDeadCmd
 }

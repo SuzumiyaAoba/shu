@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,11 +14,22 @@ import (
 )
 
 type entryPageOutputOptions struct {
-	PageInfo   bool
-	OutputJSON bool
-	OutputYAML bool
-	Noun       string
-	Render     func(io.Writer, []*core.Entry) error
+	PageInfo bool
+	Output   structuredOutputOptions
+	Noun     string
+	Render   func(io.Writer, []*core.Entry) error
+}
+
+type structuredOutputOptions struct {
+	JSON bool
+	YAML bool
+}
+
+type paginationFlags struct {
+	Limit    int
+	Offset   int
+	Page     int
+	PageInfo bool
 }
 
 // parseIDArg parses a command-line argument as an int64 ID.
@@ -55,6 +67,21 @@ func resolvePageOffset(limit, offset, page int) (int, error) {
 	return offset, nil
 }
 
+func (o structuredOutputOptions) write(w io.Writer, v any) (bool, error) {
+	return writeStructuredOutput(w, v, o.JSON, o.YAML)
+}
+
+func (o structuredOutputOptions) renderOrWrite(w io.Writer, v any, render func() error) error {
+	if handled, err := o.write(w, v); handled || err != nil {
+		return err
+	}
+	return render()
+}
+
+func (f paginationFlags) resolveOffset() (int, error) {
+	return resolvePageOffset(f.Limit, f.Offset, f.Page)
+}
+
 func writeEntryPageStructuredOutput(w io.Writer, page *core.EntryPage, pageInfo, outputJSON, outputYAML bool) (bool, error) {
 	if outputJSON {
 		return true, writeStructuredValue(w, page, page.Entries, pageInfo, outputJSON, outputYAML)
@@ -75,7 +102,7 @@ func writeEntryPageSummary(w io.Writer, page *core.EntryPage, noun string) error
 }
 
 func renderEntryPageOutput(cmd *cobra.Command, page *core.EntryPage, options entryPageOutputOptions) error {
-	if handled, err := writeEntryPageStructuredOutput(cmd.OutOrStdout(), page, options.PageInfo, options.OutputJSON, options.OutputYAML); handled || err != nil {
+	if handled, err := writeEntryPageStructuredOutput(cmd.OutOrStdout(), page, options.PageInfo, options.Output.JSON, options.Output.YAML); handled || err != nil {
 		return err
 	}
 	if err := options.Render(cmd.OutOrStdout(), page.Entries); err != nil {
@@ -91,6 +118,40 @@ func addStructuredOutputFlags(cmd *cobra.Command, outputJSON, outputYAML *bool) 
 	cmd.Flags().BoolVar(outputJSON, "json", false, "output as JSON")
 	cmd.Flags().BoolVar(outputYAML, "yaml", false, "output as YAML")
 	cmd.MarkFlagsMutuallyExclusive("json", "yaml")
+}
+
+func addPaginationFlags(cmd *cobra.Command, flags *paginationFlags, limitUsage, offsetUsage string) {
+	cmd.Flags().IntVar(&flags.Limit, "limit", 20, limitUsage)
+	cmd.Flags().IntVar(&flags.Offset, "offset", 0, offsetUsage)
+	cmd.Flags().IntVar(&flags.Page, "page", 0, "1-based page number (uses --limit)")
+	cmd.Flags().BoolVar(&flags.PageInfo, "page-info", false, "include pagination metadata")
+	cmd.MarkFlagsMutuallyExclusive("offset", "page")
+}
+
+func runSingleIDCommand[T any](cmd *cobra.Command, args []string, getService func() (T, error), action func(T, context.Context, int64) error, successFormat string) error {
+	svc, id, err := serviceAndID(cmd, args, getService)
+	if err != nil {
+		return err
+	}
+	if err := action(svc, cmd.Context(), id); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(cmd.OutOrStdout(), successFormat, id)
+	return err
+}
+
+func serviceAndID[T any](cmd *cobra.Command, args []string, getService func() (T, error)) (T, int64, error) {
+	var zero T
+
+	svc, err := getService()
+	if err != nil {
+		return zero, 0, err
+	}
+	id, err := parseIDArg(args[0])
+	if err != nil {
+		return zero, 0, err
+	}
+	return svc, id, nil
 }
 
 func writeStructuredOutput(w io.Writer, v any, outputJSON, outputYAML bool) (bool, error) {

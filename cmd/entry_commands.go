@@ -34,12 +34,8 @@ func entryCommands(getService entryServiceGetter) []*cobra.Command {
 
 func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 	var entriesFeedID int64
-	var entriesLimit int
-	var entriesOffset int
-	var entriesPage int
-	var entriesPageInfo bool
-	var entriesJSON bool
-	var entriesYAML bool
+	var pageFlags paginationFlags
+	var output structuredOutputOptions
 	var entriesUnread bool
 	var entriesStarred bool
 	var entriesTag string
@@ -53,13 +49,13 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			offset, err := resolvePageOffset(entriesLimit, entriesOffset, entriesPage)
+			offset, err := pageFlags.resolveOffset()
 			if err != nil {
 				return err
 			}
 
 			filter := core.EntryFilter{
-				Limit:       entriesLimit,
+				Limit:       pageFlags.Limit,
 				Offset:      offset,
 				UnreadOnly:  entriesUnread,
 				StarredOnly: entriesStarred,
@@ -81,26 +77,21 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 				}
 			}
 			return renderEntryPageOutput(cmd, page, entryPageOutputOptions{
-				PageInfo:   entriesPageInfo,
-				OutputJSON: entriesJSON,
-				OutputYAML: entriesYAML,
-				Noun:       "entries",
-				Render:     render,
+				PageInfo: pageFlags.PageInfo,
+				Output:   output,
+				Noun:     "entries",
+				Render:   render,
 			})
 		},
 	}
 
 	entriesCmd.Flags().Int64Var(&entriesFeedID, "feed-id", 0, "filter by feed ID")
-	entriesCmd.Flags().IntVar(&entriesLimit, "limit", 20, "max entries to show")
-	entriesCmd.Flags().IntVar(&entriesOffset, "offset", 0, "skip the first N entries")
-	entriesCmd.Flags().IntVar(&entriesPage, "page", 0, "1-based page number (uses --limit)")
-	entriesCmd.Flags().BoolVar(&entriesPageInfo, "page-info", false, "include pagination metadata")
-	addStructuredOutputFlags(entriesCmd, &entriesJSON, &entriesYAML)
+	addPaginationFlags(entriesCmd, &pageFlags, "max entries to show", "skip the first N entries")
+	addStructuredOutputFlags(entriesCmd, &output.JSON, &output.YAML)
 	entriesCmd.Flags().BoolVar(&entriesUnread, "unread", false, "show only unread entries")
 	entriesCmd.Flags().BoolVar(&entriesStarred, "starred", false, "show only starred entries")
 	entriesCmd.Flags().StringVar(&entriesTag, "tag", "", "filter by feed tag")
 	entriesCmd.Flags().StringVar(&entriesFormat, "format", "", "output format: markdown")
-	entriesCmd.MarkFlagsMutuallyExclusive("offset", "page")
 	return entriesCmd
 }
 
@@ -202,11 +193,7 @@ func newOpenCmd(getService entryServiceGetter) *cobra.Command {
 		Short: "Open an entry in the default browser",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, err := getService()
-			if err != nil {
-				return err
-			}
-			id, err := parseIDArg(args[0])
+			svc, id, err := serviceAndID(cmd, args, getService)
 			if err != nil {
 				return err
 			}
@@ -243,12 +230,8 @@ func openBrowser(url string) error {
 }
 
 func newSearchCmd(getService entryServiceGetter) *cobra.Command {
-	var searchLimit int
-	var searchOffset int
-	var searchPage int
-	var searchPageInfo bool
-	var searchJSON bool
-	var searchYAML bool
+	var pageFlags paginationFlags
+	var output structuredOutputOptions
 
 	searchCmd := &cobra.Command{
 		Use:   "search <query>",
@@ -260,49 +243,39 @@ func newSearchCmd(getService entryServiceGetter) *cobra.Command {
 				return err
 			}
 			query := strings.Join(args, " ")
-			offset, err := resolvePageOffset(searchLimit, searchOffset, searchPage)
+			offset, err := pageFlags.resolveOffset()
 			if err != nil {
 				return err
 			}
 
-			page, err := svc.SearchEntriesPage(cmd.Context(), query, searchLimit, offset)
+			page, err := svc.SearchEntriesPage(cmd.Context(), query, pageFlags.Limit, offset)
 			if err != nil {
 				return err
 			}
 
 			return renderEntryPageOutput(cmd, page, entryPageOutputOptions{
-				PageInfo:   searchPageInfo,
-				OutputJSON: searchJSON,
-				OutputYAML: searchYAML,
-				Noun:       "results",
-				Render:     renderEntryLinksTable,
+				PageInfo: pageFlags.PageInfo,
+				Output:   output,
+				Noun:     "results",
+				Render:   renderEntryLinksTable,
 			})
 		},
 	}
 
-	searchCmd.Flags().IntVar(&searchLimit, "limit", 20, "max results")
-	searchCmd.Flags().IntVar(&searchOffset, "offset", 0, "skip the first N results")
-	searchCmd.Flags().IntVar(&searchPage, "page", 0, "1-based page number (uses --limit)")
-	searchCmd.Flags().BoolVar(&searchPageInfo, "page-info", false, "include pagination metadata")
-	addStructuredOutputFlags(searchCmd, &searchJSON, &searchYAML)
-	searchCmd.MarkFlagsMutuallyExclusive("offset", "page")
+	addPaginationFlags(searchCmd, &pageFlags, "max results", "skip the first N results")
+	addStructuredOutputFlags(searchCmd, &output.JSON, &output.YAML)
 	return searchCmd
 }
 
 func newDuplicatesCmd(getService entryServiceGetter) *cobra.Command {
-	var duplicatesJSON bool
-	var duplicatesYAML bool
+	var output structuredOutputOptions
 
 	duplicatesCmd := &cobra.Command{
 		Use:   "duplicates <entry-id>",
 		Short: "Find entries from other feeds with the same link",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, err := getService()
-			if err != nil {
-				return err
-			}
-			id, err := parseIDArg(args[0])
+			svc, id, err := serviceAndID(cmd, args, getService)
 			if err != nil {
 				return err
 			}
@@ -311,24 +284,17 @@ func newDuplicatesCmd(getService entryServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-
-			if duplicatesJSON {
-				return writeJSON(cmd.OutOrStdout(), dupes)
-			}
-			if duplicatesYAML {
-				return writeYAML(cmd.OutOrStdout(), dupes)
-			}
-
-			if len(dupes) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No duplicates found.")
-				return nil
-			}
-
-			return renderEntryLinksTable(cmd.OutOrStdout(), dupes)
+			return output.renderOrWrite(cmd.OutOrStdout(), dupes, func() error {
+				if len(dupes) == 0 {
+					_, err := fmt.Fprintln(cmd.OutOrStdout(), "No duplicates found.")
+					return err
+				}
+				return renderEntryLinksTable(cmd.OutOrStdout(), dupes)
+			})
 		},
 	}
 
-	addStructuredOutputFlags(duplicatesCmd, &duplicatesJSON, &duplicatesYAML)
+	addStructuredOutputFlags(duplicatesCmd, &output.JSON, &output.YAML)
 	return duplicatesCmd
 }
 

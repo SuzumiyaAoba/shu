@@ -16,8 +16,7 @@ func opmlCommands(getService opmlServiceGetter) []*cobra.Command {
 }
 
 func newImportCmd(getService opmlServiceGetter) *cobra.Command {
-	var importJSON bool
-	var importYAML bool
+	var output structuredOutputOptions
 
 	importCmd := &cobra.Command{
 		Use:   "import <file.opml>",
@@ -38,7 +37,7 @@ func newImportCmd(getService opmlServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if handled, err := writeStructuredOutput(cmd.OutOrStdout(), result, importJSON, importYAML); handled || err != nil {
+			if handled, err := output.write(cmd.OutOrStdout(), result); handled || err != nil {
 				return err
 			}
 
@@ -57,7 +56,7 @@ func newImportCmd(getService opmlServiceGetter) *cobra.Command {
 		},
 	}
 
-	addStructuredOutputFlags(importCmd, &importJSON, &importYAML)
+	addStructuredOutputFlags(importCmd, &output.JSON, &output.YAML)
 	return importCmd
 }
 

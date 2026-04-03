@@ -20,15 +20,5 @@ func (s *Service) SearchEntriesPage(ctx context.Context, query string, limit, of
 		return nil, err
 	}
 
-	if limit == 0 {
-		limit = len(entries)
-	}
-
-	return &EntryPage{
-		Entries:    entries,
-		TotalCount: total,
-		Offset:     offset,
-		Limit:      limit,
-		HasMore:    offset+len(entries) < total,
-	}, nil
+	return buildEntryPage(entries, total, offset, limit), nil
 }

@@ -18,8 +18,7 @@ func maintenanceCommands(getService maintenanceServiceGetter) []*cobra.Command {
 }
 
 func newStatsCmd(getService maintenanceServiceGetter) *cobra.Command {
-	var statsJSON bool
-	var statsYAML bool
+	var output structuredOutputOptions
 
 	statsCmd := &cobra.Command{
 		Use:   "stats",
@@ -34,14 +33,13 @@ func newStatsCmd(getService maintenanceServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if handled, err := writeStructuredOutput(cmd.OutOrStdout(), stats, statsJSON, statsYAML); handled || err != nil {
-				return err
-			}
-			return renderFeedStatsTable(cmd.OutOrStdout(), stats)
+			return output.renderOrWrite(cmd.OutOrStdout(), stats, func() error {
+				return renderFeedStatsTable(cmd.OutOrStdout(), stats)
+			})
 		},
 	}
 
-	addStructuredOutputFlags(statsCmd, &statsJSON, &statsYAML)
+	addStructuredOutputFlags(statsCmd, &output.JSON, &output.YAML)
 	return statsCmd
 }
 

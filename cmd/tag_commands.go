@@ -20,11 +20,7 @@ func newTagCmd(getService tagServiceGetter) *cobra.Command {
 		Short: "Add a tag to a feed",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, err := getService()
-			if err != nil {
-				return err
-			}
-			id, err := parseIDArg(args[0])
+			svc, id, err := serviceAndID(cmd, args, getService)
 			if err != nil {
 				return err
 			}
@@ -43,11 +39,7 @@ func newUntagCmd(getService tagServiceGetter) *cobra.Command {
 		Short: "Remove a tag from a feed",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, err := getService()
-			if err != nil {
-				return err
-			}
-			id, err := parseIDArg(args[0])
+			svc, id, err := serviceAndID(cmd, args, getService)
 			if err != nil {
 				return err
 			}
@@ -61,8 +53,7 @@ func newUntagCmd(getService tagServiceGetter) *cobra.Command {
 }
 
 func newTagsCmd(getService tagServiceGetter) *cobra.Command {
-	var tagsJSON bool
-	var tagsYAML bool
+	var output structuredOutputOptions
 
 	tagsCmd := &cobra.Command{
 		Use:   "tags [feed-id]",
@@ -84,26 +75,26 @@ func newTagsCmd(getService tagServiceGetter) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if handled, err := writeStructuredOutput(cmd.OutOrStdout(), tags, tagsJSON, tagsYAML); handled || err != nil {
-					return err
-				}
-				for _, t := range tags {
-					fmt.Fprintln(cmd.OutOrStdout(), t.Name)
-				}
-				return nil
+				return output.renderOrWrite(cmd.OutOrStdout(), tags, func() error {
+					for _, t := range tags {
+						if _, err := fmt.Fprintln(cmd.OutOrStdout(), t.Name); err != nil {
+							return err
+						}
+					}
+					return nil
+				})
 			}
 
 			tags, err := svc.ListAllTags(ctx)
 			if err != nil {
 				return err
 			}
-			if handled, err := writeStructuredOutput(cmd.OutOrStdout(), tags, tagsJSON, tagsYAML); handled || err != nil {
-				return err
-			}
-			return renderTagsTable(cmd.OutOrStdout(), tags)
+			return output.renderOrWrite(cmd.OutOrStdout(), tags, func() error {
+				return renderTagsTable(cmd.OutOrStdout(), tags)
+			})
 		},
 	}
 
-	addStructuredOutputFlags(tagsCmd, &tagsJSON, &tagsYAML)
+	addStructuredOutputFlags(tagsCmd, &output.JSON, &output.YAML)
 	return tagsCmd
 }
