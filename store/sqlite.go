@@ -223,14 +223,7 @@ func (s *SQLiteStore) GetFeed(ctx context.Context, id int64) (*core.Feed, error)
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+feedColumns+` FROM feeds WHERE id = ?`, id,
 	)
-	feed, err := scanFeed(row)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("feed %d: %w", id, core.ErrFeedNotFound)
-		}
-		return nil, err
-	}
-	return feed, nil
+	return fetchFeed(row, fmt.Sprintf("feed %d", id))
 }
 
 // GetFeedByURL retrieves a single feed by its unique URL.
@@ -238,14 +231,7 @@ func (s *SQLiteStore) GetFeedByURL(ctx context.Context, url string) (*core.Feed,
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+feedColumns+` FROM feeds WHERE url = ?`, url,
 	)
-	feed, err := scanFeed(row)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("feed %s: %w", url, core.ErrFeedNotFound)
-		}
-		return nil, err
-	}
-	return feed, nil
+	return fetchFeed(row, fmt.Sprintf("feed %s", url))
 }
 
 // ListFeeds returns all registered feeds ordered by ascending ID.
@@ -257,17 +243,7 @@ func (s *SQLiteStore) ListFeeds(ctx context.Context) ([]*core.Feed, error) {
 	if err != nil {
 		return nil, fmt.Errorf("query feeds: %w", err)
 	}
-	defer rows.Close()
-
-	var feeds []*core.Feed
-	for rows.Next() {
-		f, err := scanFeed(rows)
-		if err != nil {
-			return nil, err
-		}
-		feeds = append(feeds, f)
-	}
-	return feeds, rows.Err()
+	return collectFeeds(rows)
 }
 
 // RemoveFeed deletes the feed with the given ID. Due to the ON DELETE CASCADE
@@ -350,14 +326,7 @@ func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (in
 // GetEntry retrieves a single entry by its primary key.
 func (s *SQLiteStore) GetEntry(ctx context.Context, id int64) (*core.Entry, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT `+entryColumns+` FROM entries WHERE id = ?`, id)
-	entry, err := scanEntry(row)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("entry %d: %w", id, core.ErrEntryNotFound)
-		}
-		return nil, err
-	}
-	return entry, nil
+	return fetchEntry(row, fmt.Sprintf("entry %d", id))
 }
 
 // Results are always ordered by fetched_at DESC (newest first).
@@ -385,17 +354,7 @@ func (s *SQLiteStore) ListEntries(ctx context.Context, filter core.EntryFilter) 
 	if err != nil {
 		return nil, fmt.Errorf("query entries: %w", err)
 	}
-	defer rows.Close()
-
-	var entries []*core.Entry
-	for rows.Next() {
-		e, err := scanEntry(rows)
-		if err != nil {
-			return nil, err
-		}
-		entries = append(entries, e)
-	}
-	return entries, rows.Err()
+	return collectEntries(rows)
 }
 
 // CountEntries returns the total number of entries matching the filter.
@@ -547,6 +506,70 @@ func scanEntry(s scanner) (*core.Entry, error) {
 	return &e, nil
 }
 
+func fetchFeed(s scanner, label string) (*core.Feed, error) {
+	feed, err := scanFeed(s)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("%s: %w", label, core.ErrFeedNotFound)
+		}
+		return nil, err
+	}
+	return feed, nil
+}
+
+func fetchEntry(s scanner, label string) (*core.Entry, error) {
+	entry, err := scanEntry(s)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("%s: %w", label, core.ErrEntryNotFound)
+		}
+		return nil, err
+	}
+	return entry, nil
+}
+
+func collectFeeds(rows *sql.Rows) ([]*core.Feed, error) {
+	defer rows.Close()
+
+	var feeds []*core.Feed
+	for rows.Next() {
+		f, err := scanFeed(rows)
+		if err != nil {
+			return nil, err
+		}
+		feeds = append(feeds, f)
+	}
+	return feeds, rows.Err()
+}
+
+func collectEntries(rows *sql.Rows) ([]*core.Entry, error) {
+	defer rows.Close()
+
+	var entries []*core.Entry
+	for rows.Next() {
+		e, err := scanEntry(rows)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+func collectTags(rows *sql.Rows) ([]core.Tag, error) {
+	defer rows.Close()
+
+	var tags []core.Tag
+	for rows.Next() {
+		var t core.Tag
+		if err := rows.Scan(&t.ID, &t.Name); err != nil {
+			return nil, fmt.Errorf("scan tag: %w", err)
+		}
+		tags = append(tags, t)
+	}
+	return tags, rows.Err()
+}
+
 // UpdateFeed updates mutable feed fields. Only non-nil fields in the update
 // struct are applied.
 func (s *SQLiteStore) UpdateFeed(ctx context.Context, id int64, update core.FeedUpdate) error {
@@ -692,17 +715,7 @@ func (s *SQLiteStore) ListTags(ctx context.Context, feedID int64) ([]core.Tag, e
 	if err != nil {
 		return nil, fmt.Errorf("list tags: %w", err)
 	}
-	defer rows.Close()
-
-	var tags []core.Tag
-	for rows.Next() {
-		var t core.Tag
-		if err := rows.Scan(&t.ID, &t.Name); err != nil {
-			return nil, fmt.Errorf("scan tag: %w", err)
-		}
-		tags = append(tags, t)
-	}
-	return tags, rows.Err()
+	return collectTags(rows)
 }
 
 // ListAllTags returns every tag in the system.
@@ -711,17 +724,7 @@ func (s *SQLiteStore) ListAllTags(ctx context.Context) ([]core.Tag, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list all tags: %w", err)
 	}
-	defer rows.Close()
-
-	var tags []core.Tag
-	for rows.Next() {
-		var t core.Tag
-		if err := rows.Scan(&t.ID, &t.Name); err != nil {
-			return nil, fmt.Errorf("scan tag: %w", err)
-		}
-		tags = append(tags, t)
-	}
-	return tags, rows.Err()
+	return collectTags(rows)
 }
 
 // ListFeedTags returns every feed-tag association grouped by feed ID.
@@ -758,17 +761,7 @@ func (s *SQLiteStore) ListFeedsByTag(ctx context.Context, tagName string) ([]*co
 	if err != nil {
 		return nil, fmt.Errorf("list feeds by tag: %w", err)
 	}
-	defer rows.Close()
-
-	var feeds []*core.Feed
-	for rows.Next() {
-		f, err := scanFeed(rows)
-		if err != nil {
-			return nil, err
-		}
-		feeds = append(feeds, f)
-	}
-	return feeds, rows.Err()
+	return collectFeeds(rows)
 }
 
 // SearchEntries performs full-text search using the FTS5 index.
@@ -788,17 +781,7 @@ func (s *SQLiteStore) SearchEntriesPage(ctx context.Context, query string, limit
 	if err != nil {
 		return nil, fmt.Errorf("search entries: %w", err)
 	}
-	defer rows.Close()
-
-	var entries []*core.Entry
-	for rows.Next() {
-		e, err := scanEntry(rows)
-		if err != nil {
-			return nil, err
-		}
-		entries = append(entries, e)
-	}
-	return entries, rows.Err()
+	return collectEntries(rows)
 }
 
 // CountSearchEntries returns the total number of entries matching the FTS query.
@@ -951,15 +934,5 @@ func (s *SQLiteStore) FindDuplicateEntries(ctx context.Context, entryID int64) (
 	if err != nil {
 		return nil, fmt.Errorf("find duplicates: %w", err)
 	}
-	defer rows.Close()
-
-	var entries []*core.Entry
-	for rows.Next() {
-		e, err := scanEntry(rows)
-		if err != nil {
-			return nil, err
-		}
-		entries = append(entries, e)
-	}
-	return entries, rows.Err()
+	return collectEntries(rows)
 }
