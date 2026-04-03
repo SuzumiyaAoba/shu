@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"text/tabwriter"
 
 	"github.com/SuzumiyaAoba/shu/core"
 	"gopkg.in/yaml.v3"
@@ -47,16 +48,10 @@ func resolvePageOffset(limit, offset, page int) (int, error) {
 
 func writeEntryPageStructuredOutput(w io.Writer, page *core.EntryPage, pageInfo, outputJSON, outputYAML bool) (bool, error) {
 	if outputJSON {
-		if pageInfo {
-			return true, writeJSON(w, page)
-		}
-		return true, writeJSON(w, page.Entries)
+		return true, writeStructuredValue(w, page, page.Entries, pageInfo, outputJSON, outputYAML)
 	}
 	if outputYAML {
-		if pageInfo {
-			return true, writeYAML(w, page)
-		}
-		return true, writeYAML(w, page.Entries)
+		return true, writeStructuredValue(w, page, page.Entries, pageInfo, outputJSON, outputYAML)
 	}
 	return false, nil
 }
@@ -68,6 +63,87 @@ func writeEntryPageSummary(w io.Writer, page *core.EntryPage, noun string) error
 	}
 	_, err := fmt.Fprintln(w)
 	return err
+}
+
+func writeStructuredOutput(w io.Writer, v any, outputJSON, outputYAML bool) (bool, error) {
+	if outputJSON || outputYAML {
+		return true, writeStructuredValue(w, v, v, true, outputJSON, outputYAML)
+	}
+	return false, nil
+}
+
+func writeStructuredValue(w io.Writer, fullValue, simpleValue any, includeFull, outputJSON, outputYAML bool) error {
+	value := simpleValue
+	if includeFull {
+		value = fullValue
+	}
+	if outputJSON {
+		return writeJSON(w, value)
+	}
+	if outputYAML {
+		return writeYAML(w, value)
+	}
+	return nil
+}
+
+func renderFeedsTable(w io.Writer, feeds []*core.Feed) error {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "ID\tTITLE\tURL\tFETCHED\tSTATUS")
+	for _, f := range feeds {
+		fetched := "-"
+		if f.FetchedAt != nil {
+			fetched = f.FetchedAt.Format("2006-01-02 15:04")
+		}
+		status := feedStatus(f.Disabled, f.ErrorCount)
+		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\n", f.ID, f.Title, f.URL, fetched, status)
+	}
+	return tw.Flush()
+}
+
+func renderEntriesTable(w io.Writer, entries []*core.Entry) error {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "ID\tFEED\tTITLE\tLINK\tPUBLISHED")
+	for _, e := range entries {
+		pub := "-"
+		if e.PublishedAt != nil {
+			pub = e.PublishedAt.Format("2006-01-02 15:04")
+		}
+		fmt.Fprintf(tw, "%d\t%d\t%s\t%s\t%s\n", e.ID, e.FeedID, e.Title, e.Link, pub)
+	}
+	return tw.Flush()
+}
+
+func renderEntryLinksTable(w io.Writer, entries []*core.Entry) error {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "ID\tFEED\tTITLE\tLINK")
+	for _, e := range entries {
+		fmt.Fprintf(tw, "%d\t%d\t%s\t%s\n", e.ID, e.FeedID, e.Title, e.Link)
+	}
+	return tw.Flush()
+}
+
+func renderTagsTable(w io.Writer, tags []core.Tag) error {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "ID\tNAME")
+	for _, t := range tags {
+		fmt.Fprintf(tw, "%d\t%s\n", t.ID, t.Name)
+	}
+	return tw.Flush()
+}
+
+func renderFeedStatsTable(w io.Writer, stats []core.FeedStats) error {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "ID\tTITLE\tTOTAL\tUNREAD\tSTARRED\tFETCHED\tSTATUS")
+	for _, s := range stats {
+		fetched := "-"
+		if s.FetchedAt != nil {
+			fetched = s.FetchedAt.Format("2006-01-02 15:04")
+		}
+		status := feedStatus(s.Disabled, s.ErrorCount)
+		fmt.Fprintf(tw, "%d\t%s\t%d\t%d\t%d\t%s\t%s\n",
+			s.FeedID, s.Title, s.TotalCount, s.UnreadCount, s.StarredCount, fetched, status)
+	}
+	return tw.Flush()
 }
 
 // writeJSON encodes v as pretty-printed JSON to w.

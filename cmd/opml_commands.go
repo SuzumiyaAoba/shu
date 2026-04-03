@@ -38,12 +38,8 @@ func newImportCmd(getService opmlServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-
-			if importJSON {
-				return writeJSON(cmd.OutOrStdout(), result)
-			}
-			if importYAML {
-				return writeYAML(cmd.OutOrStdout(), result)
+			if handled, err := writeStructuredOutput(cmd.OutOrStdout(), result, importJSON, importYAML); handled || err != nil {
+				return err
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Imported %d feeds", result.AddedCount)

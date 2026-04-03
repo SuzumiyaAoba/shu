@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 )
@@ -85,11 +84,8 @@ func newTagsCmd(getService tagServiceGetter) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if tagsJSON {
-					return writeJSON(cmd.OutOrStdout(), tags)
-				}
-				if tagsYAML {
-					return writeYAML(cmd.OutOrStdout(), tags)
+				if handled, err := writeStructuredOutput(cmd.OutOrStdout(), tags, tagsJSON, tagsYAML); handled || err != nil {
+					return err
 				}
 				for _, t := range tags {
 					fmt.Fprintln(cmd.OutOrStdout(), t.Name)
@@ -101,20 +97,10 @@ func newTagsCmd(getService tagServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-
-			if tagsJSON {
-				return writeJSON(cmd.OutOrStdout(), tags)
+			if handled, err := writeStructuredOutput(cmd.OutOrStdout(), tags, tagsJSON, tagsYAML); handled || err != nil {
+				return err
 			}
-			if tagsYAML {
-				return writeYAML(cmd.OutOrStdout(), tags)
-			}
-
-			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tNAME")
-			for _, t := range tags {
-				fmt.Fprintf(w, "%d\t%s\n", t.ID, t.Name)
-			}
-			return w.Flush()
+			return renderTagsTable(cmd.OutOrStdout(), tags)
 		},
 	}
 

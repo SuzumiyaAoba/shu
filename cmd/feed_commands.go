@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"text/tabwriter"
 
 	"github.com/SuzumiyaAoba/shu/core"
 	"github.com/spf13/cobra"
@@ -46,11 +45,8 @@ func newAddCmd(getService feedServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if addJSON {
-				return writeJSON(cmd.OutOrStdout(), feed)
-			}
-			if addYAML {
-				return writeYAML(cmd.OutOrStdout(), feed)
+			if handled, err := writeStructuredOutput(cmd.OutOrStdout(), feed, addJSON, addYAML); handled || err != nil {
+				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Added feed #%d: %s (%s)\n", feed.ID, feed.Title, feed.URL)
 			return nil
@@ -82,25 +78,10 @@ func newListCmd(getService feedServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-
-			if listJSON {
-				return writeJSON(cmd.OutOrStdout(), feeds)
+			if handled, err := writeStructuredOutput(cmd.OutOrStdout(), feeds, listJSON, listYAML); handled || err != nil {
+				return err
 			}
-			if listYAML {
-				return writeYAML(cmd.OutOrStdout(), feeds)
-			}
-
-			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tTITLE\tURL\tFETCHED\tSTATUS")
-			for _, f := range feeds {
-				fetched := "-"
-				if f.FetchedAt != nil {
-					fetched = f.FetchedAt.Format("2006-01-02 15:04")
-				}
-				status := feedStatus(f.Disabled, f.ErrorCount)
-				fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", f.ID, f.Title, f.URL, fetched, status)
-			}
-			return w.Flush()
+			return renderFeedsTable(cmd.OutOrStdout(), feeds)
 		},
 	}
 
@@ -132,11 +113,8 @@ func newFetchCmd(getService feedServiceGetter) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if fetchJSON {
-					return writeJSON(cmd.OutOrStdout(), entries)
-				}
-				if fetchYAML {
-					return writeYAML(cmd.OutOrStdout(), entries)
+				if handled, err := writeStructuredOutput(cmd.OutOrStdout(), entries, fetchJSON, fetchYAML); handled || err != nil {
+					return err
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries from feed #%d\n", len(entries), fetchFeedID)
 				return nil
@@ -146,11 +124,8 @@ func newFetchCmd(getService feedServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if fetchJSON {
-				return writeJSON(cmd.OutOrStdout(), map[string]int{"count": count})
-			}
-			if fetchYAML {
-				return writeYAML(cmd.OutOrStdout(), map[string]int{"count": count})
+			if handled, err := writeStructuredOutput(cmd.OutOrStdout(), map[string]int{"count": count}, fetchJSON, fetchYAML); handled || err != nil {
+				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count)
 			return nil
@@ -181,12 +156,8 @@ func newDiscoverCmd(getService feedServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-
-			if discoverJSON {
-				return writeJSON(cmd.OutOrStdout(), feeds)
-			}
-			if discoverYAML {
-				return writeYAML(cmd.OutOrStdout(), feeds)
+			if handled, err := writeStructuredOutput(cmd.OutOrStdout(), feeds, discoverJSON, discoverYAML); handled || err != nil {
+				return err
 			}
 
 			if len(feeds) == 0 {
@@ -339,12 +310,8 @@ func newRemoveDeadFeedsCmd(getService feedServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-
-			if outputJSON {
-				return writeJSON(cmd.OutOrStdout(), feeds)
-			}
-			if outputYAML {
-				return writeYAML(cmd.OutOrStdout(), feeds)
+			if handled, err := writeStructuredOutput(cmd.OutOrStdout(), feeds, outputJSON, outputYAML); handled || err != nil {
+				return err
 			}
 
 			if len(feeds) == 0 {

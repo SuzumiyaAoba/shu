@@ -5,7 +5,6 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/SuzumiyaAoba/shu/core"
 	"github.com/spf13/cobra"
@@ -75,16 +74,7 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 					return err
 				}
 			} else {
-				w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-				fmt.Fprintln(w, "ID\tFEED\tTITLE\tLINK\tPUBLISHED")
-				for _, e := range page.Entries {
-					pub := "-"
-					if e.PublishedAt != nil {
-						pub = e.PublishedAt.Format("2006-01-02 15:04")
-					}
-					fmt.Fprintf(w, "%d\t%d\t%s\t%s\t%s\n", e.ID, e.FeedID, e.Title, e.Link, pub)
-				}
-				if err := w.Flush(); err != nil {
+				if err := renderEntriesTable(cmd.OutOrStdout(), page.Entries); err != nil {
 					return err
 				}
 			}
@@ -338,12 +328,7 @@ func newSearchCmd(getService entryServiceGetter) *cobra.Command {
 				return err
 			}
 
-			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tFEED\tTITLE\tLINK")
-			for _, e := range page.Entries {
-				fmt.Fprintf(w, "%d\t%d\t%s\t%s\n", e.ID, e.FeedID, e.Title, e.Link)
-			}
-			if err := w.Flush(); err != nil {
+			if err := renderEntryLinksTable(cmd.OutOrStdout(), page.Entries); err != nil {
 				return err
 			}
 			if searchPageInfo {
@@ -399,12 +384,7 @@ func newDuplicatesCmd(getService entryServiceGetter) *cobra.Command {
 				return nil
 			}
 
-			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tFEED\tTITLE\tLINK")
-			for _, e := range dupes {
-				fmt.Fprintf(w, "%d\t%d\t%s\t%s\n", e.ID, e.FeedID, e.Title, e.Link)
-			}
-			return w.Flush()
+			return renderEntryLinksTable(cmd.OutOrStdout(), dupes)
 		},
 	}
 
