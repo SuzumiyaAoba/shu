@@ -15,13 +15,12 @@ import (
 func TestFetchFeed(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
@@ -41,13 +40,12 @@ func TestFetchFeed(t *testing.T) {
 func TestFetchFeedDeduplication(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
@@ -84,13 +82,12 @@ func TestFetchFeedReturnsOnlyNewEntriesAfterPartialInsert(t *testing.T) {
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, responseBody.Load().(string))
+		_, _ = io.WriteString(w, responseBody.Load().(string))
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
@@ -139,13 +136,12 @@ func TestFetchFeedReturnsOnlyNewEntriesAfterPartialInsert(t *testing.T) {
 func TestFetchAll(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	_, _ = svc.AddFeed(ctx, ts.URL+"/feed1.xml", "")
@@ -164,13 +160,12 @@ func TestFetchAll(t *testing.T) {
 func TestFetchAllWithObserver(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	feed1, _ := svc.AddFeed(ctx, ts.URL+"/feed1.xml", "")
@@ -214,7 +209,7 @@ func TestFetchAllCanceledDoesNotRecordFeedError(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if requestCount.Add(1) == 1 {
 			w.Header().Set("Content-Type", "application/rss+xml")
-			io.WriteString(w, testRSSFeed)
+			_, _ = io.WriteString(w, testRSSFeed)
 			return
 		}
 		select {
@@ -226,8 +221,7 @@ func TestFetchAllCanceledDoesNotRecordFeedError(t *testing.T) {
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -278,13 +272,12 @@ func TestFetchAllCanceledDoesNotRecordFeedError(t *testing.T) {
 func TestFetchFeedWithObserverDisabled(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
@@ -324,13 +317,12 @@ func TestFetchFeedWithObserverNotModified(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/rss+xml")
 		w.Header().Set("ETag", `"etag-1"`)
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
@@ -364,13 +356,12 @@ func TestFetchFeedWithObserverNotModified(t *testing.T) {
 func TestListEntries(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
@@ -388,13 +379,12 @@ func TestListEntries(t *testing.T) {
 func TestFetchFeedExpandedFields(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
@@ -482,13 +472,12 @@ const testAtomFeed = `<?xml version="1.0" encoding="UTF-8"?>
 func TestFetchFeedAtomFields(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/atom+xml")
-		io.WriteString(w, testAtomFeed)
+		_, _ = io.WriteString(w, testAtomFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	feed, err := svc.AddFeed(ctx, ts.URL+"/atom.xml", "")

@@ -15,7 +15,7 @@ import (
 func TestListDeadFeeds(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
@@ -26,8 +26,7 @@ func TestListDeadFeeds(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	svc := core.New(st, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	svc.SetHTTPClient(ts.Client())
+	svc := core.New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	deadFeed, _ := svc.AddFeed(ctx, ts.URL+"/dead.xml", "Dead Feed")
@@ -54,7 +53,7 @@ func TestListDeadFeeds(t *testing.T) {
 func TestRemoveDeadFeeds(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
@@ -65,8 +64,7 @@ func TestRemoveDeadFeeds(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	svc := core.New(st, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	svc.SetHTTPClient(ts.Client())
+	svc := core.New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	deadFeed, _ := svc.AddFeed(ctx, ts.URL+"/dead.xml", "Dead Feed")

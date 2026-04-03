@@ -123,7 +123,10 @@ type Option func(*Service)
 // WithHTTPClient configures the service to use the provided HTTP client.
 func WithHTTPClient(c *http.Client) Option {
 	return func(s *Service) {
-		s.SetHTTPClient(c)
+		if c == nil {
+			return
+		}
+		s.setHTTPClient(c)
 	}
 }
 
@@ -131,7 +134,10 @@ func WithHTTPClient(c *http.Client) Option {
 // client while preserving the shu User-Agent header.
 func WithHTTPClientWithUserAgent(c *http.Client) Option {
 	return func(s *Service) {
-		s.SetHTTPClientWithUserAgent(c)
+		if c == nil {
+			return
+		}
+		s.setHTTPClient(httpClientWithUserAgent(c))
 	}
 }
 
@@ -158,37 +164,20 @@ func New(store Store, logger *slog.Logger, options ...Option) *Service {
 	return svc
 }
 
-// Deprecated: prefer [WithHTTPClient] with [New]. SetHTTPClient replaces the
-// service's HTTP client entirely.
-// This is primarily used in tests to inject an [httptest.Server] client that
-// routes requests to a local test server. Note that the replacement client
-// will NOT have the User-Agent transport; use [SetHTTPClientWithUserAgent] if
-// the User-Agent header is needed.
-func (s *Service) SetHTTPClient(c *http.Client) {
-	s.clientMu.Lock()
-	defer s.clientMu.Unlock()
-	s.client = c
-}
-
-// Deprecated: prefer [WithHTTPClientWithUserAgent] with [New].
-// SetHTTPClientWithUserAgent replaces the service's HTTP client while
-// preserving the User-Agent injection behavior. The given client's transport
-// is wrapped with [userAgentTransport], so all requests made through the
-// returned client will carry the "shu/0.1" User-Agent header.
-//
-// This is useful in tests where you need both a test-server-routed transport
-// and the User-Agent header.
-func (s *Service) SetHTTPClientWithUserAgent(c *http.Client) {
+func httpClientWithUserAgent(c *http.Client) *http.Client {
+	client := *c
 	transport := c.Transport
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
+	client.Transport = &userAgentTransport{base: transport}
+	return &client
+}
+
+func (s *Service) setHTTPClient(c *http.Client) {
 	s.clientMu.Lock()
 	defer s.clientMu.Unlock()
-	s.client = &http.Client{
-		Timeout:   c.Timeout,
-		Transport: &userAgentTransport{base: transport},
-	}
+	s.client = c
 }
 
 func (s *Service) httpClient() *http.Client {

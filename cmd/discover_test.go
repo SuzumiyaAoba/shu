@@ -2,14 +2,12 @@ package cmd
 
 import (
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/SuzumiyaAoba/shu/core"
-	"github.com/SuzumiyaAoba/shu/store"
 )
 
 func TestDiscoverCmd(t *testing.T) {
@@ -20,16 +18,11 @@ func TestDiscoverCmd(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		io.WriteString(w, htmlPage)
+		_, _ = io.WriteString(w, htmlPage)
 	}))
 	defer ts.Close()
 
-	// Need a custom setup since discover uses a different server response.
-	s, _ := store.NewSQLiteStore(":memory:")
-	t.Cleanup(func() { s.Close() })
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	service := core.New(s, logger)
-	service.SetHTTPClient(ts.Client())
+	service, _ := newCommandTestService(t, nil, core.WithHTTPClient(ts.Client()))
 	setTestService(t, service)
 
 	out, err := executeCommand("discover", ts.URL)
@@ -49,15 +42,11 @@ func TestDiscoverCmdJSON(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		io.WriteString(w, htmlPage)
+		_, _ = io.WriteString(w, htmlPage)
 	}))
 	defer ts.Close()
 
-	s, _ := store.NewSQLiteStore(":memory:")
-	t.Cleanup(func() { s.Close() })
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	service := core.New(s, logger)
-	service.SetHTTPClient(ts.Client())
+	service, _ := newCommandTestService(t, nil, core.WithHTTPClient(ts.Client()))
 	setTestService(t, service)
 
 	out, err := executeCommand("discover", ts.URL, "--json")
@@ -77,15 +66,11 @@ func TestDiscoverCmdYAML(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		io.WriteString(w, htmlPage)
+		_, _ = io.WriteString(w, htmlPage)
 	}))
 	defer ts.Close()
 
-	s, _ := store.NewSQLiteStore(":memory:")
-	t.Cleanup(func() { s.Close() })
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	service := core.New(s, logger)
-	service.SetHTTPClient(ts.Client())
+	service, _ := newCommandTestService(t, nil, core.WithHTTPClient(ts.Client()))
 	setTestService(t, service)
 
 	out, err := executeCommand("discover", ts.URL, "--yaml")

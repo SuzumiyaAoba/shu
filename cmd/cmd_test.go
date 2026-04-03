@@ -21,24 +21,34 @@ var testService *core.Service
 func setupTest(t *testing.T) string {
 	t.Helper()
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	service, ts := newCommandTestService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	}))
-	t.Cleanup(ts.Close)
+	setTestService(t, service)
+
+	return ts.URL
+}
+
+func newCommandTestService(t *testing.T, handler http.Handler, options ...core.Option) (*core.Service, *httptest.Server) {
+	t.Helper()
 
 	s, err := store.NewSQLiteStore(":memory:")
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	service := core.New(s, logger)
-	service.SetHTTPClient(ts.Client())
-	setTestService(t, service)
 
-	return ts.URL
+	var ts *httptest.Server
+	if handler != nil {
+		ts = httptest.NewServer(handler)
+		t.Cleanup(ts.Close)
+		options = append([]core.Option{core.WithHTTPClient(ts.Client())}, options...)
+	}
+
+	return core.New(s, logger, options...), ts
 }
 
 func setTestService(t *testing.T, service *core.Service) {

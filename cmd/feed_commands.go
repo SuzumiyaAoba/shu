@@ -48,8 +48,8 @@ func newAddCmd(getService feedServiceGetter) *cobra.Command {
 			if handled, err := output.write(cmd.OutOrStdout(), feed); handled || err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Added feed #%d: %s (%s)\n", feed.ID, feed.Title, feed.URL)
-			return nil
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Added feed #%d: %s (%s)\n", feed.ID, feed.Title, feed.URL)
+			return err
 		},
 	}
 
@@ -109,8 +109,8 @@ func newFetchCmd(getService feedServiceGetter) *cobra.Command {
 				if handled, err := output.write(cmd.OutOrStdout(), entries); handled || err != nil {
 					return err
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries from feed #%d\n", len(entries), fetchFeedID)
-				return nil
+				_, err = fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries from feed #%d\n", len(entries), fetchFeedID)
+				return err
 			}
 
 			count, err := svc.FetchAll(ctx)
@@ -120,8 +120,8 @@ func newFetchCmd(getService feedServiceGetter) *cobra.Command {
 			if handled, err := output.write(cmd.OutOrStdout(), map[string]int{"count": count}); handled || err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count)
-			return nil
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count)
+			return err
 		},
 	}
 

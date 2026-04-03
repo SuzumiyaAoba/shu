@@ -113,7 +113,7 @@ func (s *Service) fetchBodyConditional(ctx context.Context, url, etag, lastModif
 	if err != nil {
 		return nil, nil, fmt.Errorf("http get: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotModified {
 		return nil, resp.Header, nil

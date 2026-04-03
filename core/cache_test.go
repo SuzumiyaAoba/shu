@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+
+	"github.com/SuzumiyaAoba/shu/core"
 )
 
 func TestFetchFeedConditionalGET(t *testing.T) {
@@ -19,7 +21,7 @@ func TestFetchFeedConditionalGET(t *testing.T) {
 		if r.Header.Get("If-None-Match") == "" {
 			w.Header().Set("ETag", `"etag-123"`)
 			w.Header().Set("Content-Type", "application/rss+xml")
-			io.WriteString(w, testRSSFeed)
+			_, _ = io.WriteString(w, testRSSFeed)
 			return
 		}
 
@@ -30,13 +32,12 @@ func TestFetchFeedConditionalGET(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")

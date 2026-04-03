@@ -31,7 +31,7 @@ func newImportCmd(getService opmlServiceGetter) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("open file: %w", err)
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 
 			result, err := svc.ImportOPMLDetailed(cmd.Context(), f)
 			if err != nil {
@@ -41,18 +41,26 @@ func newImportCmd(getService opmlServiceGetter) *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Imported %d feeds", result.AddedCount)
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Imported %d feeds", result.AddedCount); err != nil {
+				return err
+			}
 			if result.ReusedCount > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), ", reused %d", result.ReusedCount)
+				if _, err := fmt.Fprintf(cmd.OutOrStdout(), ", reused %d", result.ReusedCount); err != nil {
+					return err
+				}
 			}
 			if result.TaggedCount > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), ", applied %d tags", result.TaggedCount)
+				if _, err := fmt.Fprintf(cmd.OutOrStdout(), ", applied %d tags", result.TaggedCount); err != nil {
+					return err
+				}
 			}
 			if len(result.Issues) > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), ", %d issues", len(result.Issues))
+				if _, err := fmt.Fprintf(cmd.OutOrStdout(), ", %d issues", len(result.Issues)); err != nil {
+					return err
+				}
 			}
-			fmt.Fprintln(cmd.OutOrStdout())
-			return nil
+			_, err = fmt.Fprintln(cmd.OutOrStdout())
+			return err
 		},
 	}
 
@@ -74,13 +82,17 @@ func newExportCmd(getService opmlServiceGetter) *cobra.Command {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			fmt.Fprint(out, xml.Header)
+			if _, err := fmt.Fprint(out, xml.Header); err != nil {
+				return err
+			}
 			enc := xml.NewEncoder(out)
 			enc.Indent("", "  ")
 			if err := enc.Encode(opml); err != nil {
 				return fmt.Errorf("encode OPML: %w", err)
 			}
-			fmt.Fprintln(out)
+			if _, err := fmt.Fprintln(out); err != nil {
+				return err
+			}
 			return nil
 		},
 	}

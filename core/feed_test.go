@@ -14,23 +14,26 @@ import (
 )
 
 func newTestService(t *testing.T, handler http.Handler) *core.Service {
+	return newTestServiceWithOptions(t, handler)
+}
+
+func newTestServiceWithOptions(t *testing.T, handler http.Handler, options ...core.Option) *core.Service {
 	t.Helper()
 	s, err := store.NewSQLiteStore(":memory:")
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc := core.New(s, logger)
 
 	if handler != nil {
 		ts := httptest.NewServer(handler)
 		t.Cleanup(ts.Close)
-		svc.SetHTTPClient(ts.Client())
+		options = append([]core.Option{core.WithHTTPClient(ts.Client())}, options...)
 	}
 
-	return svc
+	return core.New(s, logger, options...)
 }
 
 const testRSSFeed = `<?xml version="1.0" encoding="UTF-8"?>
@@ -69,21 +72,16 @@ func TestUserAgentHeader(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotUA = r.Header.Get("User-Agent")
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
 	s, _ := store.NewSQLiteStore(":memory:")
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc := core.New(s, logger)
-	// Don't call SetHTTPClient - use the default client with User-Agent transport
-
-	// The default client has User-Agent transport but uses http.DefaultTransport,
-	// which won't route to our test server. We need to wrap the test server's transport.
 	testClient := ts.Client()
-	svc.SetHTTPClientWithUserAgent(testClient)
+	svc := core.New(s, logger, core.WithHTTPClientWithUserAgent(testClient))
 
 	_, _ = svc.AddFeed(context.Background(), ts.URL+"/feed.xml", "")
 	if gotUA != "shu/0.1" {
@@ -94,16 +92,13 @@ func TestUserAgentHeader(t *testing.T) {
 func TestAddFeed(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
-	svc := newTestService(t, handler)
 	ctx := context.Background()
 
-	// AddFeed needs a URL - in tests we use the test server URL
-	// but AddFeed takes a URL that it fetches, so we need the test server
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 
 	feed, err := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
 	if err != nil {
@@ -135,13 +130,12 @@ func TestAddFeed(t *testing.T) {
 func TestAddFeedWithTitleOverride(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	feed, err := svc.AddFeed(ctx, ts.URL+"/feed.xml", "My Custom Title")
@@ -166,13 +160,12 @@ func TestAddFeedInvalidURL(t *testing.T) {
 func TestAddFeedInvalidDocument(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		io.WriteString(w, "<html>not a feed</html>")
+		_, _ = io.WriteString(w, "<html>not a feed</html>")
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	_, err := svc.AddFeed(ctx, ts.URL+"/index.html", "")
@@ -187,13 +180,12 @@ func TestAddFeedInvalidDocument(t *testing.T) {
 func TestListFeeds(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	_, _ = svc.AddFeed(ctx, ts.URL+"/feed1.xml", "")
@@ -211,13 +203,12 @@ func TestListFeeds(t *testing.T) {
 func TestRemoveFeed(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
@@ -235,7 +226,7 @@ func TestRemoveFeed(t *testing.T) {
 func TestNewWithNilLogger(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
-		io.WriteString(w, testRSSFeed)
+		_, _ = io.WriteString(w, testRSSFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
@@ -244,10 +235,9 @@ func TestNewWithNilLogger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
-	svc := core.New(s, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := core.New(s, nil, core.WithHTTPClient(ts.Client()))
 
 	ctx := context.Background()
 	if _, err := svc.AddFeed(ctx, ts.URL+"/feed.xml", ""); err != nil {

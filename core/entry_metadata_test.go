@@ -14,13 +14,12 @@ import (
 func TestEntryMetadataHelpers(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/atom+xml")
-		io.WriteString(w, testAtomFeed)
+		_, _ = io.WriteString(w, testAtomFeed)
 	})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	feed, err := svc.AddFeed(ctx, ts.URL+"/atom.xml", "")

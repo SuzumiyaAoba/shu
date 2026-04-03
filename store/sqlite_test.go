@@ -16,7 +16,7 @@ func newTestStore(t *testing.T) *SQLiteStore {
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	return s
 }
 
@@ -214,7 +214,7 @@ func TestNewSQLiteStoreWithOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteStoreWithOptions failed: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 
 	if got := s.db.Stats().MaxOpenConnections; got != 2 {
 		t.Fatalf("MaxOpenConnections = %d, want 2", got)

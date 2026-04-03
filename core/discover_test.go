@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/SuzumiyaAoba/shu/core"
 )
 
 func TestDiscoverFeeds(t *testing.T) {
@@ -22,12 +24,11 @@ func TestDiscoverFeeds(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		io.WriteString(w, htmlPage)
+		_, _ = io.WriteString(w, htmlPage)
 	}))
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	feeds, err := svc.DiscoverFeeds(ctx, ts.URL+"/")
@@ -52,12 +53,11 @@ func TestDiscoverFeedsNone(t *testing.T) {
 	htmlPage := `<!DOCTYPE html><html><head><title>No feeds</title></head><body>Hello</body></html>`
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, htmlPage)
+		_, _ = io.WriteString(w, htmlPage)
 	}))
 	defer ts.Close()
 
-	svc := newTestService(t, nil)
-	svc.SetHTTPClient(ts.Client())
+	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 
 	feeds, err := svc.DiscoverFeeds(context.Background(), ts.URL)
 	if err != nil {

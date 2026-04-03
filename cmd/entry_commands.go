@@ -19,6 +19,8 @@ type entryMutationSpec struct {
 	batchLabel  string
 }
 
+var browserOpener = openBrowser
+
 func entryCommands(getService entryServiceGetter) []*cobra.Command {
 	return withGroup("entries",
 		newEntriesCmd(getService),
@@ -99,26 +101,46 @@ func renderEntriesMarkdown(cmd *cobra.Command, entries []*core.Entry) error {
 	out := cmd.OutOrStdout()
 	for i, e := range entries {
 		if i > 0 {
-			fmt.Fprintln(out, "---")
-			fmt.Fprintln(out)
+			if _, err := fmt.Fprintln(out, "---"); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintln(out); err != nil {
+				return err
+			}
 		}
-		fmt.Fprintf(out, "## %s\n\n", e.Title)
+		if _, err := fmt.Fprintf(out, "## %s\n\n", e.Title); err != nil {
+			return err
+		}
 		if e.Link != "" {
-			fmt.Fprintf(out, "URL: %s\n", e.Link)
+			if _, err := fmt.Fprintf(out, "URL: %s\n", e.Link); err != nil {
+				return err
+			}
 		}
 		if e.PublishedAt != nil {
-			fmt.Fprintf(out, "Published: %s\n", e.PublishedAt.Format("2006-01-02 15:04"))
+			if _, err := fmt.Fprintf(out, "Published: %s\n", e.PublishedAt.Format("2006-01-02 15:04")); err != nil {
+				return err
+			}
 		}
 		if e.Author != "" {
-			fmt.Fprintf(out, "Author: %s\n", e.Author)
+			if _, err := fmt.Fprintf(out, "Author: %s\n", e.Author); err != nil {
+				return err
+			}
 		}
-		fmt.Fprintln(out)
+		if _, err := fmt.Fprintln(out); err != nil {
+			return err
+		}
 		if e.Content != "" {
-			fmt.Fprintln(out, e.Content)
+			if _, err := fmt.Fprintln(out, e.Content); err != nil {
+				return err
+			}
 		} else if e.Summary != "" {
-			fmt.Fprintln(out, e.Summary)
+			if _, err := fmt.Fprintln(out, e.Summary); err != nil {
+				return err
+			}
 		}
-		fmt.Fprintln(out)
+		if _, err := fmt.Fprintln(out); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -207,11 +229,15 @@ func newOpenCmd(getService entryServiceGetter) *cobra.Command {
 			}
 
 			if err := svc.MarkEntryRead(cmd.Context(), id); err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not mark entry as read: %v\n", err)
+				if _, writeErr := fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not mark entry as read: %v\n", err); writeErr != nil {
+					return writeErr
+				}
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Opening %s\n", entry.Link)
-			return openBrowser(entry.Link)
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Opening %s\n", entry.Link); err != nil {
+				return err
+			}
+			return browserOpener(entry.Link)
 		},
 	}
 }
@@ -311,12 +337,12 @@ func runEntryMutation(cmd *cobra.Command, args []string, getService entryService
 		if err := spec.runSingle(svc, cmd.Context(), ids[0]); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), spec.singleLabel, ids[0])
-		return nil
+		_, err = fmt.Fprintf(cmd.OutOrStdout(), spec.singleLabel, ids[0])
+		return err
 	}
 	if err := spec.runBatch(svc, cmd.Context(), ids); err != nil {
 		return err
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), spec.batchLabel, len(ids))
-	return nil
+	_, err = fmt.Fprintf(cmd.OutOrStdout(), spec.batchLabel, len(ids))
+	return err
 }

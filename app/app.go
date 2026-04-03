@@ -134,6 +134,9 @@ func serviceOptions(cfg Config) []core.Option {
 	return options
 }
 
+// composeCleanup runs cleanup callbacks in order and stops at the first error.
+// Later cleanup functions are skipped once an earlier step fails so callers can
+// rely on a deterministic first-failure result.
 func composeCleanup(closers ...func() error) func() error {
 	return func() error {
 		for _, closer := range closers {

@@ -58,8 +58,8 @@ func newCleanupCmd(getService maintenanceServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Deleted %d entries older than %s\n", n, cleanupOlderThan)
-			return nil
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Deleted %d entries older than %s\n", n, cleanupOlderThan)
+			return err
 		},
 	}
 
@@ -81,13 +81,19 @@ func newRunCmd(getService maintenanceServiceGetter) *cobra.Command {
 			ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Starting daemon (interval: %s). Press Ctrl+C to stop.\n", runInterval)
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Starting daemon (interval: %s). Press Ctrl+C to stop.\n", runInterval); err != nil {
+				return err
+			}
 
 			count, err := svc.FetchAll(ctx)
 			if err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "fetch error: %v\n", err)
+				if _, writeErr := fmt.Fprintf(cmd.ErrOrStderr(), "fetch error: %v\n", err); writeErr != nil {
+					return writeErr
+				}
 			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count)
+				if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count); err != nil {
+					return err
+				}
 			}
 
 			ticker := time.NewTicker(runInterval)
@@ -96,15 +102,19 @@ func newRunCmd(getService maintenanceServiceGetter) *cobra.Command {
 			for {
 				select {
 				case <-ctx.Done():
-					fmt.Fprintln(cmd.OutOrStdout(), "Shutting down...")
-					return nil
+					_, err := fmt.Fprintln(cmd.OutOrStdout(), "Shutting down...")
+					return err
 				case <-ticker.C:
 					count, err := svc.FetchAll(ctx)
 					if err != nil {
-						fmt.Fprintf(cmd.ErrOrStderr(), "fetch error: %v\n", err)
+						if _, writeErr := fmt.Fprintf(cmd.ErrOrStderr(), "fetch error: %v\n", err); writeErr != nil {
+							return writeErr
+						}
 						continue
 					}
-					fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count)
+					if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count); err != nil {
+						return err
+					}
 				}
 			}
 		},
