@@ -48,23 +48,12 @@ func (s *Service) fetchFeedByID(ctx context.Context, feedID int64, notifier *fet
 }
 
 func (s *Service) fetchFeed(ctx context.Context, feed *Feed, notifier *fetchNotifier) ([]*Entry, error) {
-	notifier.emit(FetchEvent{
-		Type:      FetchEventStarted,
-		FeedID:    feed.ID,
-		FeedTitle: feed.Title,
-		FeedURL:   feed.URL,
-	})
+	emitFetchStarted(notifier, feed)
 
 	// Skip disabled feeds.
 	if feed.Disabled {
 		s.logger.Warn("feed disabled, skipping", "id", feed.ID, "title", feed.Title)
-		notifier.emit(FetchEvent{
-			Type:       FetchEventSkipped,
-			FeedID:     feed.ID,
-			FeedTitle:  feed.Title,
-			FeedURL:    feed.URL,
-			SkipReason: FetchSkipDisabled,
-		})
+		emitFetchSkipped(notifier, feed, FetchSkipDisabled)
 		return nil, nil
 	}
 
@@ -73,13 +62,7 @@ func (s *Service) fetchFeed(ctx context.Context, feed *Feed, notifier *fetchNoti
 	if err != nil {
 		fetchErr := fmt.Errorf("fetch feed %s: %w", feed.URL, err)
 		if ctx.Err() != nil {
-			notifier.emit(FetchEvent{
-				Type:      FetchEventCompleted,
-				FeedID:    feed.ID,
-				FeedTitle: feed.Title,
-				FeedURL:   feed.URL,
-				Err:       fetchErr,
-			})
+			emitFetchCompleted(notifier, feed, 0, fetchErr)
 			return nil, fetchErr
 		}
 
@@ -87,13 +70,7 @@ func (s *Service) fetchFeed(ctx context.Context, feed *Feed, notifier *fetchNoti
 		if recErr := s.store.RecordFeedError(ctx, feed.ID, err.Error()); recErr != nil {
 			s.logger.Warn("failed to record feed error", "id", feed.ID, "error", recErr)
 		}
-		notifier.emit(FetchEvent{
-			Type:      FetchEventCompleted,
-			FeedID:    feed.ID,
-			FeedTitle: feed.Title,
-			FeedURL:   feed.URL,
-			Err:       fetchErr,
-		})
+		emitFetchCompleted(notifier, feed, 0, fetchErr)
 		return nil, fetchErr
 	}
 
@@ -101,23 +78,11 @@ func (s *Service) fetchFeed(ctx context.Context, feed *Feed, notifier *fetchNoti
 	if body == nil {
 		if err := s.store.UpdateFeedFetchedAt(ctx, feed.ID); err != nil {
 			updateErr := fmt.Errorf("update fetched_at: %w", err)
-			notifier.emit(FetchEvent{
-				Type:      FetchEventCompleted,
-				FeedID:    feed.ID,
-				FeedTitle: feed.Title,
-				FeedURL:   feed.URL,
-				Err:       updateErr,
-			})
+			emitFetchCompleted(notifier, feed, 0, updateErr)
 			return nil, updateErr
 		}
 		s.logger.Info("feed not modified", "id", feed.ID, "title", feed.Title)
-		notifier.emit(FetchEvent{
-			Type:       FetchEventSkipped,
-			FeedID:     feed.ID,
-			FeedTitle:  feed.Title,
-			FeedURL:    feed.URL,
-			SkipReason: FetchSkipNotModified,
-		})
+		emitFetchSkipped(notifier, feed, FetchSkipNotModified)
 		return nil, nil
 	}
 
@@ -133,13 +98,7 @@ func (s *Service) fetchFeed(ctx context.Context, feed *Feed, notifier *fetchNoti
 	parsed, err := fp.Parse(bytes.NewReader(body))
 	if err != nil {
 		parseErr := fmt.Errorf("%w: parse feed %s: %v", ErrInvalidFeed, feed.URL, err)
-		notifier.emit(FetchEvent{
-			Type:      FetchEventCompleted,
-			FeedID:    feed.ID,
-			FeedTitle: feed.Title,
-			FeedURL:   feed.URL,
-			Err:       parseErr,
-		})
+		emitFetchCompleted(notifier, feed, 0, parseErr)
 		return nil, parseErr
 	}
 
@@ -166,25 +125,13 @@ func (s *Service) fetchFeed(ctx context.Context, feed *Feed, notifier *fetchNoti
 	inserted, err := s.store.AddEntries(ctx, entries)
 	if err != nil {
 		storeErr := fmt.Errorf("store entries: %w", err)
-		notifier.emit(FetchEvent{
-			Type:      FetchEventCompleted,
-			FeedID:    feed.ID,
-			FeedTitle: feed.Title,
-			FeedURL:   feed.URL,
-			Err:       storeErr,
-		})
+		emitFetchCompleted(notifier, feed, 0, storeErr)
 		return nil, storeErr
 	}
 
 	if err := s.store.UpdateFeedFetchedAt(ctx, feed.ID); err != nil {
 		updateErr := fmt.Errorf("update fetched_at: %w", err)
-		notifier.emit(FetchEvent{
-			Type:      FetchEventCompleted,
-			FeedID:    feed.ID,
-			FeedTitle: feed.Title,
-			FeedURL:   feed.URL,
-			Err:       updateErr,
-		})
+		emitFetchCompleted(notifier, feed, 0, updateErr)
 		return nil, updateErr
 	}
 
@@ -198,22 +145,11 @@ func (s *Service) fetchFeed(ctx context.Context, feed *Feed, notifier *fetchNoti
 	// Return newly inserted entries for convenience.
 	// We retrieve them by querying the newest `inserted` entries for this feed.
 	if inserted == 0 {
-		notifier.emit(FetchEvent{
-			Type:      FetchEventCompleted,
-			FeedID:    feed.ID,
-			FeedTitle: feed.Title,
-			FeedURL:   feed.URL,
-		})
+		emitFetchCompleted(notifier, feed, 0, nil)
 		return nil, nil
 	}
 	if inserted == len(entries) {
-		notifier.emit(FetchEvent{
-			Type:       FetchEventCompleted,
-			FeedID:     feed.ID,
-			FeedTitle:  feed.Title,
-			FeedURL:    feed.URL,
-			NewEntries: len(entries),
-		})
+		emitFetchCompleted(notifier, feed, len(entries), nil)
 		return entries, nil
 	}
 
@@ -226,23 +162,11 @@ func (s *Service) fetchFeed(ctx context.Context, feed *Feed, notifier *fetchNoti
 	if err != nil {
 		s.logger.Warn("failed to retrieve newly inserted entries", "id", feed.ID, "error", err)
 		// We can gracefully format the first few entries since the actual exact set is unknown.
-		notifier.emit(FetchEvent{
-			Type:       FetchEventCompleted,
-			FeedID:     feed.ID,
-			FeedTitle:  feed.Title,
-			FeedURL:    feed.URL,
-			NewEntries: inserted,
-		})
+		emitFetchCompleted(notifier, feed, inserted, nil)
 		return entries[:inserted], nil
 	}
 
-	notifier.emit(FetchEvent{
-		Type:       FetchEventCompleted,
-		FeedID:     feed.ID,
-		FeedTitle:  feed.Title,
-		FeedURL:    feed.URL,
-		NewEntries: len(newEntries),
-	})
+	emitFetchCompleted(notifier, feed, len(newEntries), nil)
 	return newEntries, nil
 }
 
@@ -323,52 +247,94 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 		Contributors: json.RawMessage("[]"),
 	}
 
-	// Published date.
+	populateEntryTimes(e, item)
+	populateEntryAuthorAndImage(e, item)
+	populateEntryAuthors(e, item, atomEntry)
+	populateEntryLinks(e, item, atomEntry)
+	populateEntryCategories(e, item, atomEntry)
+	populateEntryEnclosures(e, item)
+	populateEntryContributors(e, atomEntry)
+	populateEntryAtomMetadata(e, atomEntry)
+
+	return e
+}
+
+func emitFetchStarted(notifier *fetchNotifier, feed *Feed) {
+	notifier.emit(FetchEvent{
+		Type:      FetchEventStarted,
+		FeedID:    feed.ID,
+		FeedTitle: feed.Title,
+		FeedURL:   feed.URL,
+	})
+}
+
+func emitFetchSkipped(notifier *fetchNotifier, feed *Feed, reason FetchSkipReason) {
+	notifier.emit(FetchEvent{
+		Type:       FetchEventSkipped,
+		FeedID:     feed.ID,
+		FeedTitle:  feed.Title,
+		FeedURL:    feed.URL,
+		SkipReason: reason,
+	})
+}
+
+func emitFetchCompleted(notifier *fetchNotifier, feed *Feed, newEntries int, err error) {
+	notifier.emit(FetchEvent{
+		Type:       FetchEventCompleted,
+		FeedID:     feed.ID,
+		FeedTitle:  feed.Title,
+		FeedURL:    feed.URL,
+		NewEntries: newEntries,
+		Err:        err,
+	})
+}
+
+func populateEntryTimes(e *Entry, item *gofeed.Item) {
 	if item.PublishedParsed != nil {
 		t := item.PublishedParsed.UTC()
 		e.PublishedAt = &t
 	}
-
-	// Updated date.
 	if item.UpdatedParsed != nil {
 		t := item.UpdatedParsed.UTC()
 		e.UpdatedAt = &t
 	}
+}
 
-	// Author (convenience first-author-name field).
+func populateEntryAuthorAndImage(e *Entry, item *gofeed.Item) {
 	if len(item.Authors) > 0 && item.Authors[0] != nil {
 		e.Author = item.Authors[0].Name
 	} else if item.Author != nil {
 		e.Author = item.Author.Name
 	}
-
-	// Image URL.
 	if item.Image != nil {
 		e.ImageURL = item.Image.URL
 	}
+}
 
-	// --- Authors (full structured array) ---
+func populateEntryAuthors(e *Entry, item *gofeed.Item, atomEntry *atom.Entry) {
 	if atomEntry != nil && len(atomEntry.Authors) > 0 {
 		persons := make([]EntryPerson, len(atomEntry.Authors))
 		for i, a := range atomEntry.Authors {
 			persons[i] = EntryPerson{Name: a.Name, Email: a.Email, URI: a.URI}
 		}
-		b, _ := json.Marshal(persons)
-		e.Authors = b
-	} else if len(item.Authors) > 0 {
-		persons := make([]EntryPerson, 0, len(item.Authors))
-		for _, a := range item.Authors {
-			if a != nil {
-				persons = append(persons, EntryPerson{Name: a.Name, Email: a.Email})
-			}
-		}
-		if len(persons) > 0 {
-			b, _ := json.Marshal(persons)
-			e.Authors = b
+		e.Authors, _ = json.Marshal(persons)
+		return
+	}
+	if len(item.Authors) == 0 {
+		return
+	}
+	persons := make([]EntryPerson, 0, len(item.Authors))
+	for _, a := range item.Authors {
+		if a != nil {
+			persons = append(persons, EntryPerson{Name: a.Name, Email: a.Email})
 		}
 	}
+	if len(persons) > 0 {
+		e.Authors, _ = json.Marshal(persons)
+	}
+}
 
-	// --- Links (full structured array) ---
+func populateEntryLinks(e *Entry, item *gofeed.Item, atomEntry *atom.Entry) {
 	if atomEntry != nil && len(atomEntry.Links) > 0 {
 		links := make([]EntryLink, len(atomEntry.Links))
 		for i, l := range atomEntry.Links {
@@ -377,71 +343,74 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 				Hreflang: l.Hreflang, Title: l.Title, Length: l.Length,
 			}
 		}
-		b, _ := json.Marshal(links)
-		e.Links = b
-	} else if len(item.Links) > 0 {
-		links := make([]EntryLink, len(item.Links))
-		for i, href := range item.Links {
-			links[i] = EntryLink{Href: href}
-		}
-		b, _ := json.Marshal(links)
-		e.Links = b
+		e.Links, _ = json.Marshal(links)
+		return
 	}
+	if len(item.Links) == 0 {
+		return
+	}
+	links := make([]EntryLink, len(item.Links))
+	for i, href := range item.Links {
+		links[i] = EntryLink{Href: href}
+	}
+	e.Links, _ = json.Marshal(links)
+}
 
-	// --- Categories (structured with term/scheme/label) ---
+func populateEntryCategories(e *Entry, item *gofeed.Item, atomEntry *atom.Entry) {
 	if atomEntry != nil && len(atomEntry.Categories) > 0 {
 		cats := make([]EntryCategory, len(atomEntry.Categories))
 		for i, c := range atomEntry.Categories {
 			cats[i] = EntryCategory{Term: c.Term, Scheme: c.Scheme, Label: c.Label}
 		}
-		b, _ := json.Marshal(cats)
-		e.Categories = b
-	} else if len(item.Categories) > 0 {
-		cats := make([]EntryCategory, len(item.Categories))
-		for i, c := range item.Categories {
-			cats[i] = EntryCategory{Term: c}
-		}
-		b, _ := json.Marshal(cats)
-		e.Categories = b
+		e.Categories, _ = json.Marshal(cats)
+		return
 	}
-
-	// --- Enclosures ---
-	if len(item.Enclosures) > 0 {
-		encs := make([]EntryEnclosure, len(item.Enclosures))
-		for i, v := range item.Enclosures {
-			encs[i] = EntryEnclosure{URL: v.URL, Length: v.Length, Type: v.Type}
-		}
-		b, _ := json.Marshal(encs)
-		e.Enclosures = b
+	if len(item.Categories) == 0 {
+		return
 	}
-
-	// --- Contributors (Atom only) ---
-	if atomEntry != nil && len(atomEntry.Contributors) > 0 {
-		persons := make([]EntryPerson, len(atomEntry.Contributors))
-		for i, c := range atomEntry.Contributors {
-			persons[i] = EntryPerson{Name: c.Name, Email: c.Email, URI: c.URI}
-		}
-		b, _ := json.Marshal(persons)
-		e.Contributors = b
+	cats := make([]EntryCategory, len(item.Categories))
+	for i, c := range item.Categories {
+		cats[i] = EntryCategory{Term: c}
 	}
+	e.Categories, _ = json.Marshal(cats)
+}
 
-	// --- Rights (Atom only) ---
-	if atomEntry != nil {
-		e.Rights = atomEntry.Rights
+func populateEntryEnclosures(e *Entry, item *gofeed.Item) {
+	if len(item.Enclosures) == 0 {
+		return
 	}
-
-	// --- Source (Atom only) ---
-	if atomEntry != nil && atomEntry.Source != nil {
-		src := EntrySource{
-			Title:   atomEntry.Source.Title,
-			ID:      atomEntry.Source.ID,
-			Updated: atomEntry.Source.Updated,
-		}
-		b, _ := json.Marshal(src)
-		e.Source = b
+	encs := make([]EntryEnclosure, len(item.Enclosures))
+	for i, v := range item.Enclosures {
+		encs[i] = EntryEnclosure{URL: v.URL, Length: v.Length, Type: v.Type}
 	}
+	e.Enclosures, _ = json.Marshal(encs)
+}
 
-	return e
+func populateEntryContributors(e *Entry, atomEntry *atom.Entry) {
+	if atomEntry == nil || len(atomEntry.Contributors) == 0 {
+		return
+	}
+	persons := make([]EntryPerson, len(atomEntry.Contributors))
+	for i, c := range atomEntry.Contributors {
+		persons[i] = EntryPerson{Name: c.Name, Email: c.Email, URI: c.URI}
+	}
+	e.Contributors, _ = json.Marshal(persons)
+}
+
+func populateEntryAtomMetadata(e *Entry, atomEntry *atom.Entry) {
+	if atomEntry == nil {
+		return
+	}
+	e.Rights = atomEntry.Rights
+	if atomEntry.Source == nil {
+		return
+	}
+	src := EntrySource{
+		Title:   atomEntry.Source.Title,
+		ID:      atomEntry.Source.ID,
+		Updated: atomEntry.Source.Updated,
+	}
+	e.Source, _ = json.Marshal(src)
 }
 
 // FetchAll fetches every registered feed concurrently (up to 10 at a time) and
