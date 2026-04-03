@@ -51,3 +51,33 @@ func TestSearchCmdPageInfoJSON(t *testing.T) {
 		t.Errorf("expected page metadata in output: %s", out)
 	}
 }
+
+func TestSearchCmdPageInfoTable(t *testing.T) {
+	tsURL := setupTest(t)
+
+	_, _ = executeCommand("add", tsURL+"/feed.xml")
+	_, _ = executeCommand("fetch")
+
+	out, err := executeCommand("search", "Post", "--limit", "1", "--page-info")
+	if err != nil {
+		t.Fatalf("search --page-info failed: %v", err)
+	}
+	if !strings.Contains(out, "Showing 1/2 results") {
+		t.Errorf("expected page footer in output: %s", out)
+	}
+}
+
+func TestSearchCmdYAML(t *testing.T) {
+	tsURL := setupTest(t)
+
+	_, _ = executeCommand("add", tsURL+"/feed.xml")
+	_, _ = executeCommand("fetch")
+
+	out, err := executeCommand("search", "Post", "--yaml")
+	if err != nil {
+		t.Fatalf("search --yaml failed: %v", err)
+	}
+	if !strings.Contains(out, "title: Post 1") {
+		t.Errorf("expected YAML output: %s", out)
+	}
+}

@@ -54,19 +54,7 @@ func Open(cfg Config) (*Instance, error) {
 		return nil, err
 	}
 
-	closeFn := composeCleanup(ownedClose, cfg.Cleanup)
-	options := make([]core.Option, 0, 1)
-	if cfg.HTTPClient != nil {
-		options = append(options, core.WithHTTPClientWithUserAgent(cfg.HTTPClient))
-	}
-	svc := core.New(dataStore, logger, options...)
-
-	return &Instance{
-		Service: svc,
-		Store:   dataStore,
-		Logger:  logger,
-		Close:   closeFn,
-	}, nil
+	return buildInstance(cfg, logger, dataStore, ownedClose), nil
 }
 
 func validateConfig(cfg Config) error {
@@ -127,6 +115,23 @@ func openStore(cfg Config) (core.Store, func() error, error) {
 	return dataStore, func() error {
 		return dataStore.Close()
 	}, nil
+}
+
+func buildInstance(cfg Config, logger *slog.Logger, dataStore core.Store, ownedClose func() error) *Instance {
+	return &Instance{
+		Service: core.New(dataStore, logger, serviceOptions(cfg)...),
+		Store:   dataStore,
+		Logger:  logger,
+		Close:   composeCleanup(ownedClose, cfg.Cleanup),
+	}
+}
+
+func serviceOptions(cfg Config) []core.Option {
+	options := make([]core.Option, 0, 1)
+	if cfg.HTTPClient != nil {
+		options = append(options, core.WithHTTPClientWithUserAgent(cfg.HTTPClient))
+	}
+	return options
 }
 
 func composeCleanup(closers ...func() error) func() error {

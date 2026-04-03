@@ -18,6 +18,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type coreServiceGetter func() (*core.Service, error)
+
 func newRootCmd(injected *core.Service) *cobra.Command {
 	home, _ := os.UserHomeDir()
 	defaultDB := filepath.Join(home, ".shu", "shu.db")
@@ -38,21 +40,11 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 		return nil, errors.New("service not initialized")
 	}
 
-	getFeedService := func() (feedService, error) {
-		return getService()
-	}
-	getEntryService := func() (entryService, error) {
-		return getService()
-	}
-	getTagService := func() (tagService, error) {
-		return getService()
-	}
-	getMaintenanceService := func() (maintenanceService, error) {
-		return getService()
-	}
-	getOPMLService := func() (opmlService, error) {
-		return getService()
-	}
+	getFeedService := asFeedServiceGetter(getService)
+	getEntryService := asEntryServiceGetter(getService)
+	getTagService := asTagServiceGetter(getService)
+	getMaintenanceService := asMaintenanceServiceGetter(getService)
+	getOPMLService := asOPMLServiceGetter(getService)
 
 	rootCmd := &cobra.Command{
 		Use:   "shu",
@@ -64,18 +56,11 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 			}
 
 			var err error
-			var sqliteOptions *store.SQLiteOptions
-			if sqliteBusyTimeout > 0 || sqliteMaxOpenConns > 0 {
-				sqliteOptions = &store.SQLiteOptions{
-					BusyTimeout:  sqliteBusyTimeout,
-					MaxOpenConns: sqliteMaxOpenConns,
-				}
-			}
 			instance, err = app.Open(app.Config{
 				DBPath:        dbPath,
 				LogLevel:      logLevel,
 				LogOutput:     os.Stderr,
-				SQLiteOptions: sqliteOptions,
+				SQLiteOptions: sqliteOptionsFromFlags(sqliteBusyTimeout, sqliteMaxOpenConns),
 			})
 			return err
 		},
@@ -124,5 +109,45 @@ func withGroup(groupID string, commands ...*cobra.Command) []*cobra.Command {
 func Execute() {
 	if err := newRootCmd(nil).Execute(); err != nil {
 		os.Exit(1)
+	}
+}
+
+func asFeedServiceGetter(get coreServiceGetter) feedServiceGetter {
+	return func() (feedService, error) {
+		return get()
+	}
+}
+
+func asEntryServiceGetter(get coreServiceGetter) entryServiceGetter {
+	return func() (entryService, error) {
+		return get()
+	}
+}
+
+func asTagServiceGetter(get coreServiceGetter) tagServiceGetter {
+	return func() (tagService, error) {
+		return get()
+	}
+}
+
+func asMaintenanceServiceGetter(get coreServiceGetter) maintenanceServiceGetter {
+	return func() (maintenanceService, error) {
+		return get()
+	}
+}
+
+func asOPMLServiceGetter(get coreServiceGetter) opmlServiceGetter {
+	return func() (opmlService, error) {
+		return get()
+	}
+}
+
+func sqliteOptionsFromFlags(busyTimeout time.Duration, maxOpenConns int) *store.SQLiteOptions {
+	if busyTimeout <= 0 && maxOpenConns <= 0 {
+		return nil
+	}
+	return &store.SQLiteOptions{
+		BusyTimeout:  busyTimeout,
+		MaxOpenConns: maxOpenConns,
 	}
 }

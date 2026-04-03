@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -190,6 +191,73 @@ func TestOpenWithSQLiteOptions(t *testing.T) {
 	t.Cleanup(func() { _ = instance.Close() })
 }
 
+func TestOpenCleanupRunsOwnedCloseBeforeCleanup(t *testing.T) {
+	var calls []string
+
+	instance, err := Open(Config{
+		DBPath:   ":memory:",
+		LogLevel: "info",
+		OpenStore: func(dsn string) (core.Store, error) {
+			return &trackingStore{
+				fakeStore: newFakeStore(),
+				closeFn: func() error {
+					calls = append(calls, "store")
+					return nil
+				},
+			}, nil
+		},
+		Cleanup: func() error {
+			calls = append(calls, "cleanup")
+			return nil
+		},
+		LogOutput: new(bytes.Buffer),
+	})
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+
+	if err := instance.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	if len(calls) != 2 || calls[0] != "store" || calls[1] != "cleanup" {
+		t.Fatalf("cleanup order = %v, want [store cleanup]", calls)
+	}
+}
+
+func TestOpenCleanupStopsAfterFirstError(t *testing.T) {
+	cleanupCalled := false
+
+	instance, err := Open(Config{
+		DBPath:   ":memory:",
+		LogLevel: "info",
+		OpenStore: func(dsn string) (core.Store, error) {
+			return &trackingStore{
+				fakeStore: newFakeStore(),
+				closeFn: func() error {
+					return errors.New("close failed")
+				},
+			}, nil
+		},
+		Cleanup: func() error {
+			cleanupCalled = true
+			return nil
+		},
+		LogOutput: new(bytes.Buffer),
+	})
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+
+	err = instance.Close()
+	if err == nil || err.Error() != "close failed" {
+		t.Fatalf("Close error = %v, want close failed", err)
+	}
+	if cleanupCalled {
+		t.Fatal("expected cleanup to be skipped after close error")
+	}
+}
+
 type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -244,3 +312,15 @@ func (f *fakeStore) ListFeedsByTag(context.Context, string) ([]*core.Feed, error
 func (f *fakeStore) FeedStats(context.Context) ([]core.FeedStats, error)          { return nil, nil }
 func (f *fakeStore) CleanupEntries(context.Context, time.Time) (int, error)       { return 0, nil }
 func (f *fakeStore) Close() error                                                 { return nil }
+
+type trackingStore struct {
+	*fakeStore
+	closeFn func() error
+}
+
+func (s *trackingStore) Close() error {
+	if s.closeFn != nil {
+		return s.closeFn()
+	}
+	return nil
+}

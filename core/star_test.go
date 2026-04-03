@@ -3,6 +3,7 @@ package core_test
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -47,5 +48,35 @@ func TestStarEntries(t *testing.T) {
 	starred, _ = svc.ListEntries(ctx, core.EntryFilter{Limit: 10, StarredOnly: true})
 	if len(starred) != 0 {
 		t.Errorf("got %d starred, want 0", len(starred))
+	}
+}
+
+func TestStarEntriesEmptyIDs(t *testing.T) {
+	svc := newTestService(t, nil)
+	ctx := context.Background()
+
+	if err := svc.StarEntries(ctx, nil); err != nil {
+		t.Fatalf("StarEntries(nil) failed: %v", err)
+	}
+	if err := svc.StarEntries(ctx, []int64{}); err != nil {
+		t.Fatalf("StarEntries(empty) failed: %v", err)
+	}
+	if err := svc.UnstarEntries(ctx, nil); err != nil {
+		t.Fatalf("UnstarEntries(nil) failed: %v", err)
+	}
+	if err := svc.UnstarEntries(ctx, []int64{}); err != nil {
+		t.Fatalf("UnstarEntries(empty) failed: %v", err)
+	}
+}
+
+func TestUnstarEntriesWrapsStoreError(t *testing.T) {
+	svc := core.New(newEntryStateErrorStore(io.EOF), slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	err := svc.UnstarEntries(context.Background(), []int64{1, 2})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if err.Error() != "unstar entries: EOF" {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

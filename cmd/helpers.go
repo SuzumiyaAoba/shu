@@ -12,6 +12,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type entryPageOutputOptions struct {
+	PageInfo   bool
+	OutputJSON bool
+	OutputYAML bool
+	Noun       string
+	Render     func(io.Writer, []*core.Entry) error
+}
+
 // parseIDArg parses a command-line argument as an int64 ID.
 func parseIDArg(arg string) (int64, error) {
 	id, err := strconv.ParseInt(arg, 10, 64)
@@ -64,6 +72,19 @@ func writeEntryPageSummary(w io.Writer, page *core.EntryPage, noun string) error
 	}
 	_, err := fmt.Fprintln(w)
 	return err
+}
+
+func renderEntryPageOutput(cmd *cobra.Command, page *core.EntryPage, options entryPageOutputOptions) error {
+	if handled, err := writeEntryPageStructuredOutput(cmd.OutOrStdout(), page, options.PageInfo, options.OutputJSON, options.OutputYAML); handled || err != nil {
+		return err
+	}
+	if err := options.Render(cmd.OutOrStdout(), page.Entries); err != nil {
+		return err
+	}
+	if options.PageInfo {
+		return writeEntryPageSummary(cmd.OutOrStdout(), page, options.Noun)
+	}
+	return nil
 }
 
 func addStructuredOutputFlags(cmd *cobra.Command, outputJSON, outputYAML *bool) {

@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -9,6 +11,13 @@ import (
 	"github.com/SuzumiyaAoba/shu/core"
 	"github.com/spf13/cobra"
 )
+
+type entryMutationSpec struct {
+	runSingle   func(entryService, context.Context, int64) error
+	runBatch    func(entryService, context.Context, []int64) error
+	singleLabel string
+	batchLabel  string
+}
 
 func entryCommands(getService entryServiceGetter) []*cobra.Command {
 	return withGroup("entries",
@@ -65,24 +74,19 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 				return err
 			}
 
-			if handled, err := writeEntryPageStructuredOutput(cmd.OutOrStdout(), page, entriesPageInfo, entriesJSON, entriesYAML); handled || err != nil {
-				return err
-			}
-
+			render := renderEntriesTable
 			if entriesFormat == "markdown" {
-				if err := renderEntriesMarkdown(cmd, page.Entries); err != nil {
-					return err
-				}
-			} else {
-				if err := renderEntriesTable(cmd.OutOrStdout(), page.Entries); err != nil {
-					return err
+				render = func(w io.Writer, entries []*core.Entry) error {
+					return renderEntriesMarkdown(cmd, entries)
 				}
 			}
-
-			if entriesPageInfo {
-				return writeEntryPageSummary(cmd.OutOrStdout(), page, "entries")
-			}
-			return nil
+			return renderEntryPageOutput(cmd, page, entryPageOutputOptions{
+				PageInfo:   entriesPageInfo,
+				OutputJSON: entriesJSON,
+				OutputYAML: entriesYAML,
+				Noun:       "entries",
+				Render:     render,
+			})
 		},
 	}
 
@@ -134,26 +138,12 @@ func newReadCmd(getService entryServiceGetter) *cobra.Command {
 		Short: "Mark entries as read",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, err := getService()
-			if err != nil {
-				return err
-			}
-			ids, err := parseIDArgs(args)
-			if err != nil {
-				return err
-			}
-			if len(ids) == 1 {
-				if err := svc.MarkEntryRead(cmd.Context(), ids[0]); err != nil {
-					return err
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "Marked entry #%d as read\n", ids[0])
-				return nil
-			}
-			if err := svc.MarkEntriesRead(cmd.Context(), ids); err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Marked %d entries as read\n", len(ids))
-			return nil
+			return runEntryMutation(cmd, args, getService, entryMutationSpec{
+				runSingle:   func(svc entryService, ctx context.Context, id int64) error { return svc.MarkEntryRead(ctx, id) },
+				runBatch:    func(svc entryService, ctx context.Context, ids []int64) error { return svc.MarkEntriesRead(ctx, ids) },
+				singleLabel: "Marked entry #%d as read\n",
+				batchLabel:  "Marked %d entries as read\n",
+			})
 		},
 	}
 }
@@ -164,26 +154,12 @@ func newUnreadCmd(getService entryServiceGetter) *cobra.Command {
 		Short: "Mark entries as unread",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, err := getService()
-			if err != nil {
-				return err
-			}
-			ids, err := parseIDArgs(args)
-			if err != nil {
-				return err
-			}
-			if len(ids) == 1 {
-				if err := svc.MarkEntryUnread(cmd.Context(), ids[0]); err != nil {
-					return err
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "Marked entry #%d as unread\n", ids[0])
-				return nil
-			}
-			if err := svc.MarkEntriesUnread(cmd.Context(), ids); err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Marked %d entries as unread\n", len(ids))
-			return nil
+			return runEntryMutation(cmd, args, getService, entryMutationSpec{
+				runSingle:   func(svc entryService, ctx context.Context, id int64) error { return svc.MarkEntryUnread(ctx, id) },
+				runBatch:    func(svc entryService, ctx context.Context, ids []int64) error { return svc.MarkEntriesUnread(ctx, ids) },
+				singleLabel: "Marked entry #%d as unread\n",
+				batchLabel:  "Marked %d entries as unread\n",
+			})
 		},
 	}
 }
@@ -194,26 +170,12 @@ func newStarCmd(getService entryServiceGetter) *cobra.Command {
 		Short: "Bookmark entries",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, err := getService()
-			if err != nil {
-				return err
-			}
-			ids, err := parseIDArgs(args)
-			if err != nil {
-				return err
-			}
-			if len(ids) == 1 {
-				if err := svc.StarEntry(cmd.Context(), ids[0]); err != nil {
-					return err
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "Starred entry #%d\n", ids[0])
-				return nil
-			}
-			if err := svc.StarEntries(cmd.Context(), ids); err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Starred %d entries\n", len(ids))
-			return nil
+			return runEntryMutation(cmd, args, getService, entryMutationSpec{
+				runSingle:   func(svc entryService, ctx context.Context, id int64) error { return svc.StarEntry(ctx, id) },
+				runBatch:    func(svc entryService, ctx context.Context, ids []int64) error { return svc.StarEntries(ctx, ids) },
+				singleLabel: "Starred entry #%d\n",
+				batchLabel:  "Starred %d entries\n",
+			})
 		},
 	}
 }
@@ -224,26 +186,12 @@ func newUnstarCmd(getService entryServiceGetter) *cobra.Command {
 		Short: "Remove bookmarks from entries",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, err := getService()
-			if err != nil {
-				return err
-			}
-			ids, err := parseIDArgs(args)
-			if err != nil {
-				return err
-			}
-			if len(ids) == 1 {
-				if err := svc.UnstarEntry(cmd.Context(), ids[0]); err != nil {
-					return err
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "Unstarred entry #%d\n", ids[0])
-				return nil
-			}
-			if err := svc.UnstarEntries(cmd.Context(), ids); err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Unstarred %d entries\n", len(ids))
-			return nil
+			return runEntryMutation(cmd, args, getService, entryMutationSpec{
+				runSingle:   func(svc entryService, ctx context.Context, id int64) error { return svc.UnstarEntry(ctx, id) },
+				runBatch:    func(svc entryService, ctx context.Context, ids []int64) error { return svc.UnstarEntries(ctx, ids) },
+				singleLabel: "Unstarred entry #%d\n",
+				batchLabel:  "Unstarred %d entries\n",
+			})
 		},
 	}
 }
@@ -322,17 +270,13 @@ func newSearchCmd(getService entryServiceGetter) *cobra.Command {
 				return err
 			}
 
-			if handled, err := writeEntryPageStructuredOutput(cmd.OutOrStdout(), page, searchPageInfo, searchJSON, searchYAML); handled || err != nil {
-				return err
-			}
-
-			if err := renderEntryLinksTable(cmd.OutOrStdout(), page.Entries); err != nil {
-				return err
-			}
-			if searchPageInfo {
-				return writeEntryPageSummary(cmd.OutOrStdout(), page, "results")
-			}
-			return nil
+			return renderEntryPageOutput(cmd, page, entryPageOutputOptions{
+				PageInfo:   searchPageInfo,
+				OutputJSON: searchJSON,
+				OutputYAML: searchYAML,
+				Noun:       "results",
+				Render:     renderEntryLinksTable,
+			})
 		},
 	}
 
@@ -386,4 +330,27 @@ func newDuplicatesCmd(getService entryServiceGetter) *cobra.Command {
 
 	addStructuredOutputFlags(duplicatesCmd, &duplicatesJSON, &duplicatesYAML)
 	return duplicatesCmd
+}
+
+func runEntryMutation(cmd *cobra.Command, args []string, getService entryServiceGetter, spec entryMutationSpec) error {
+	svc, err := getService()
+	if err != nil {
+		return err
+	}
+	ids, err := parseIDArgs(args)
+	if err != nil {
+		return err
+	}
+	if len(ids) == 1 {
+		if err := spec.runSingle(svc, cmd.Context(), ids[0]); err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), spec.singleLabel, ids[0])
+		return nil
+	}
+	if err := spec.runBatch(svc, cmd.Context(), ids); err != nil {
+		return err
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), spec.batchLabel, len(ids))
+	return nil
 }
