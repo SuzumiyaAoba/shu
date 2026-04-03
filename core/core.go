@@ -41,6 +41,8 @@ type EntryStore interface {
 	ListEntries(ctx context.Context, filter EntryFilter) ([]*Entry, error)
 	CountEntries(ctx context.Context, filter EntryFilter) (int, error)
 	SearchEntries(ctx context.Context, query string, limit int) ([]*Entry, error)
+	SearchEntriesPage(ctx context.Context, query string, limit, offset int) ([]*Entry, error)
+	CountSearchEntries(ctx context.Context, query string) (int, error)
 	FindDuplicateEntries(ctx context.Context, entryID int64) ([]*Entry, error)
 }
 
@@ -156,7 +158,8 @@ func New(store Store, logger *slog.Logger, options ...Option) *Service {
 	return svc
 }
 
-// SetHTTPClient replaces the service's HTTP client entirely.
+// Deprecated: prefer [WithHTTPClient] with [New]. SetHTTPClient replaces the
+// service's HTTP client entirely.
 // This is primarily used in tests to inject an [httptest.Server] client that
 // routes requests to a local test server. Note that the replacement client
 // will NOT have the User-Agent transport; use [SetHTTPClientWithUserAgent] if
@@ -167,6 +170,7 @@ func (s *Service) SetHTTPClient(c *http.Client) {
 	s.client = c
 }
 
+// Deprecated: prefer [WithHTTPClientWithUserAgent] with [New].
 // SetHTTPClientWithUserAgent replaces the service's HTTP client while
 // preserving the User-Agent injection behavior. The given client's transport
 // is wrapped with [userAgentTransport], so all requests made through the

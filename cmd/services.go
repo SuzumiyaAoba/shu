@@ -25,6 +25,7 @@ type entryService interface {
 	ListEntries(ctx context.Context, filter core.EntryFilter) ([]*core.Entry, error)
 	ListEntriesPage(ctx context.Context, filter core.EntryFilter) (*core.EntryPage, error)
 	SearchEntries(ctx context.Context, query string, limit int) ([]*core.Entry, error)
+	SearchEntriesPage(ctx context.Context, query string, limit, offset int) (*core.EntryPage, error)
 	FindDuplicateEntries(ctx context.Context, entryID int64) ([]*core.Entry, error)
 	MarkEntryRead(ctx context.Context, id int64) error
 	MarkEntriesRead(ctx context.Context, ids []int64) error
@@ -51,6 +52,7 @@ type maintenanceService interface {
 
 type opmlService interface {
 	ImportOPML(ctx context.Context, r io.Reader) (int, error)
+	ImportOPMLDetailed(ctx context.Context, r io.Reader) (*core.OPMLImportResult, error)
 	ExportOPML(ctx context.Context) (*core.OPML, error)
 }
 

@@ -773,12 +773,17 @@ func (s *SQLiteStore) ListFeedsByTag(ctx context.Context, tagName string) ([]*co
 
 // SearchEntries performs full-text search using the FTS5 index.
 func (s *SQLiteStore) SearchEntries(ctx context.Context, query string, limit int) ([]*core.Entry, error) {
+	return s.SearchEntriesPage(ctx, query, limit, 0)
+}
+
+// SearchEntriesPage performs paginated full-text search using the FTS5 index.
+func (s *SQLiteStore) SearchEntriesPage(ctx context.Context, query string, limit, offset int) ([]*core.Entry, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+entryColumns+` FROM entries WHERE id IN (SELECT rowid FROM entries_fts WHERE entries_fts MATCH ?) ORDER BY fetched_at DESC LIMIT ?`,
-		query, limit,
+		`SELECT `+entryColumns+` FROM entries WHERE id IN (SELECT rowid FROM entries_fts WHERE entries_fts MATCH ?) ORDER BY fetched_at DESC LIMIT ? OFFSET ?`,
+		query, limit, offset,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("search entries: %w", err)
@@ -794,6 +799,18 @@ func (s *SQLiteStore) SearchEntries(ctx context.Context, query string, limit int
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
+}
+
+// CountSearchEntries returns the total number of entries matching the FTS query.
+func (s *SQLiteStore) CountSearchEntries(ctx context.Context, query string) (int, error) {
+	var count int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM entries WHERE id IN (SELECT rowid FROM entries_fts WHERE entries_fts MATCH ?)`,
+		query,
+	).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count search entries: %w", err)
+	}
+	return count, nil
 }
 
 // StarEntry sets the starred_at timestamp on the given entry.

@@ -36,3 +36,18 @@ func TestSearchCmdNoResults(t *testing.T) {
 		t.Errorf("expected only header, got %d lines: %s", len(lines), out)
 	}
 }
+
+func TestSearchCmdPageInfoJSON(t *testing.T) {
+	tsURL := setupTest(t)
+
+	_, _ = executeCommand("add", tsURL+"/feed.xml")
+	_, _ = executeCommand("fetch")
+
+	out, err := executeCommand("search", "Post", "--limit", "1", "--page", "1", "--page-info", "--json")
+	if err != nil {
+		t.Fatalf("search --page-info --json failed: %v", err)
+	}
+	if !strings.Contains(out, `"total_count"`) || !strings.Contains(out, `"has_more"`) {
+		t.Errorf("expected page metadata in output: %s", out)
+	}
+}

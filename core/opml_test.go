@@ -266,6 +266,49 @@ func TestImportOPMLReturnsAddFeedError(t *testing.T) {
 	}
 }
 
+func TestImportOPMLDetailed(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		io.WriteString(w, testRSSFeed)
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	svc := newTestService(t, nil)
+	svc.SetHTTPClient(ts.Client())
+	ctx := context.Background()
+
+	_, _ = svc.AddFeed(ctx, ts.URL+"/feed1.xml", "")
+
+	opmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="Tech">
+      <outline text="Existing Feed" type="rss" xmlUrl="` + ts.URL + `/feed1.xml"/>
+      <outline text="New Feed" type="rss" xmlUrl="` + ts.URL + `/feed2.xml"/>
+      <outline text="Broken Feed" type="rss" xmlUrl="https://[invalid-url"/>
+    </outline>
+  </body>
+</opml>`
+
+	result, err := svc.ImportOPMLDetailed(ctx, strings.NewReader(opmlDoc))
+	if err != nil {
+		t.Fatalf("ImportOPMLDetailed failed: %v", err)
+	}
+	if result.AddedCount != 1 {
+		t.Fatalf("AddedCount = %d, want 1", result.AddedCount)
+	}
+	if result.ReusedCount != 1 {
+		t.Fatalf("ReusedCount = %d, want 1", result.ReusedCount)
+	}
+	if result.TaggedCount != 2 {
+		t.Fatalf("TaggedCount = %d, want 2", result.TaggedCount)
+	}
+	if len(result.Issues) != 1 {
+		t.Fatalf("Issues = %+v, want 1 issue", result.Issues)
+	}
+}
+
 func TestImportOPMLInvalidDocument(t *testing.T) {
 	svc := newTestService(t, nil)
 	ctx := context.Background()

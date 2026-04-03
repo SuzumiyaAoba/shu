@@ -10,9 +10,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/SuzumiyaAoba/shu/app"
 	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/store"
 	"github.com/spf13/cobra"
 )
 
@@ -22,6 +24,8 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 
 	var dbPath string
 	var logLevel string
+	var sqliteBusyTimeout time.Duration
+	var sqliteMaxOpenConns int
 	var instance *app.Instance
 
 	getService := func() (*core.Service, error) {
@@ -60,10 +64,18 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 			}
 
 			var err error
+			var sqliteOptions *store.SQLiteOptions
+			if sqliteBusyTimeout > 0 || sqliteMaxOpenConns > 0 {
+				sqliteOptions = &store.SQLiteOptions{
+					BusyTimeout:  sqliteBusyTimeout,
+					MaxOpenConns: sqliteMaxOpenConns,
+				}
+			}
 			instance, err = app.Open(app.Config{
-				DBPath:    dbPath,
-				LogLevel:  logLevel,
-				LogOutput: os.Stderr,
+				DBPath:        dbPath,
+				LogLevel:      logLevel,
+				LogOutput:     os.Stderr,
+				SQLiteOptions: sqliteOptions,
 			})
 			return err
 		},
@@ -88,6 +100,8 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 
 	rootCmd.PersistentFlags().StringVar(&dbPath, "db", defaultDB, "path to SQLite database")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level (debug, info, warn, error)")
+	rootCmd.PersistentFlags().DurationVar(&sqliteBusyTimeout, "sqlite-busy-timeout", 0, "SQLite busy timeout (e.g. 5s)")
+	rootCmd.PersistentFlags().IntVar(&sqliteMaxOpenConns, "sqlite-max-open-conns", 0, "SQLite max open connections")
 
 	rootCmd.AddCommand(feedCommands(getFeedService)...)
 	rootCmd.AddCommand(entryCommands(getEntryService)...)

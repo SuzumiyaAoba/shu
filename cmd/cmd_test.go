@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/SuzumiyaAoba/shu/core"
@@ -60,6 +61,22 @@ func executeCommand(args ...string) (string, error) {
 
 	err := rootCmd.Execute()
 	return buf.String(), err
+}
+
+func writeTempFile(t *testing.T, pattern, content string) string {
+	t.Helper()
+
+	f, err := os.CreateTemp(t.TempDir(), pattern)
+	if err != nil {
+		t.Fatalf("CreateTemp failed: %v", err)
+	}
+	if _, err := io.WriteString(f, content); err != nil {
+		t.Fatalf("WriteString failed: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+	return f.Name()
 }
 
 const testRSSFeed = `<?xml version="1.0" encoding="UTF-8"?>

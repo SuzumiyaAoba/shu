@@ -220,6 +220,10 @@ func (f *fakeStore) CountEntries(context.Context, core.EntryFilter) (int, error)
 func (f *fakeStore) SearchEntries(context.Context, string, int) ([]*core.Entry, error) {
 	return nil, nil
 }
+func (f *fakeStore) SearchEntriesPage(context.Context, string, int, int) ([]*core.Entry, error) {
+	return nil, nil
+}
+func (f *fakeStore) CountSearchEntries(context.Context, string) (int, error) { return 0, nil }
 func (f *fakeStore) FindDuplicateEntries(context.Context, int64) ([]*core.Entry, error) {
 	return nil, nil
 }

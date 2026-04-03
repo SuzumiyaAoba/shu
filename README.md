@@ -98,6 +98,9 @@ shu export > feeds.opml
 
 # Import feeds from OPML
 shu import feeds.opml
+
+# Inspect import results as JSON
+shu import feeds.opml --json
 ```
 
 ### Machine Readable Outputs (JSON / YAML)
@@ -132,6 +135,9 @@ By default, the SQLite database is located at `~/.shu/shu.db`. You can override 
 
 ```bash
 shu --db /path/to/custom.db list
+
+# Optional SQLite tuning
+shu --sqlite-busy-timeout 5s --sqlite-max-open-conns 2 list
 ```
 
 ## License
