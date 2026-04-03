@@ -65,6 +65,77 @@ func TestFetchFeedDeduplication(t *testing.T) {
 	}
 }
 
+func TestFetchFeedReturnsOnlyNewEntriesAfterPartialInsert(t *testing.T) {
+	var responseBody atomic.Value
+	responseBody.Store(`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Test Blog</title>
+    <link>https://example.com</link>
+    <description>A blog about testing</description>
+    <item>
+      <title>Post 1</title>
+      <link>https://example.com/post-1</link>
+      <guid>post-1</guid>
+      <description>First post</description>
+    </item>
+  </channel>
+</rss>`)
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		io.WriteString(w, responseBody.Load().(string))
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	svc := newTestService(t, nil)
+	svc.SetHTTPClient(ts.Client())
+	ctx := context.Background()
+
+	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
+
+	entries, err := svc.FetchFeed(ctx, feed.ID)
+	if err != nil {
+		t.Fatalf("first FetchFeed failed: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Title != "Post 1" {
+		t.Fatalf("first fetch returned %+v, want one existing post", entries)
+	}
+
+	responseBody.Store(`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Test Blog</title>
+    <link>https://example.com</link>
+    <description>A blog about testing</description>
+    <item>
+      <title>Post 1</title>
+      <link>https://example.com/post-1</link>
+      <guid>post-1</guid>
+      <description>First post</description>
+    </item>
+    <item>
+      <title>Post 2</title>
+      <link>https://example.com/post-2</link>
+      <guid>post-2</guid>
+      <description>Second post</description>
+    </item>
+  </channel>
+</rss>`)
+
+	entries, err = svc.FetchFeed(ctx, feed.ID)
+	if err != nil {
+		t.Fatalf("second FetchFeed failed: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("second fetch returned %d entries, want 1", len(entries))
+	}
+	if entries[0].Title != "Post 2" {
+		t.Fatalf("second fetch returned %q, want Post 2", entries[0].Title)
+	}
+}
+
 func TestFetchAll(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
@@ -241,6 +312,52 @@ func TestFetchFeedWithObserverDisabled(t *testing.T) {
 	}
 	if events[1].Type != core.FetchEventSkipped || events[1].SkipReason != core.FetchSkipDisabled {
 		t.Fatalf("second event = %+v, want skipped/disabled", events[1])
+	}
+}
+
+func TestFetchFeedWithObserverNotModified(t *testing.T) {
+	var requestCount atomic.Int32
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requestCount.Add(1) >= 3 && r.Header.Get("If-None-Match") == `"etag-1"` {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		w.Header().Set("Content-Type", "application/rss+xml")
+		w.Header().Set("ETag", `"etag-1"`)
+		io.WriteString(w, testRSSFeed)
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	svc := newTestService(t, nil)
+	svc.SetHTTPClient(ts.Client())
+	ctx := context.Background()
+
+	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
+	if _, err := svc.FetchFeed(ctx, feed.ID); err != nil {
+		t.Fatalf("initial FetchFeed failed: %v", err)
+	}
+
+	var events []core.FetchEvent
+	observer := core.FetchObserverFunc(func(event core.FetchEvent) {
+		events = append(events, event)
+	})
+
+	entries, err := svc.FetchFeedWithObserver(ctx, feed.ID, observer)
+	if err != nil {
+		t.Fatalf("FetchFeedWithObserver failed: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("got %d entries, want 0", len(entries))
+	}
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want 2", len(events))
+	}
+	if events[0].Type != core.FetchEventStarted {
+		t.Fatalf("first event = %+v, want started", events[0])
+	}
+	if events[1].Type != core.FetchEventSkipped || events[1].SkipReason != core.FetchSkipNotModified {
+		t.Fatalf("second event = %+v, want skipped/not_modified", events[1])
 	}
 }
 

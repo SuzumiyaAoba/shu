@@ -36,6 +36,13 @@ const feedColumns = `id, url, title, site_url, added_at, fetched_at, description
 // entryColumns is the SELECT column list shared by ListEntries.
 const entryColumns = `id, feed_id, guid, title, link, summary, published_at, fetched_at, content, author, image_url, categories, updated_at, enclosures, authors, links, contributors, rights, source, read_at, starred_at`
 
+const insertEntrySQL = `INSERT OR IGNORE INTO entries (feed_id, guid, title, link, summary, published_at, content, author, image_url, categories, updated_at, enclosures, authors, links, contributors, rights, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+type entryFilterQuery struct {
+	conditions []string
+	args       []any
+}
+
 // nowRFC3339 returns the current UTC time formatted as RFC 3339.
 func nowRFC3339() string {
 	return time.Now().UTC().Format(time.RFC3339)
@@ -288,26 +295,9 @@ func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (in
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.PrepareContext(ctx,
-		`INSERT OR IGNORE INTO entries (feed_id, guid, title, link, summary, published_at, content, author, image_url, categories, updated_at, enclosures, authors, links, contributors, rights, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-	)
+	inserted, err := addEntriesTx(ctx, tx, entries)
 	if err != nil {
-		return 0, fmt.Errorf("prepare statement: %w", err)
-	}
-	defer stmt.Close()
-
-	inserted := 0
-	for _, e := range entries {
-		result, err := stmt.ExecContext(ctx,
-			e.FeedID, e.GUID, e.Title, e.Link, e.Summary, formatNullableTime(e.PublishedAt),
-			e.Content, e.Author, e.ImageURL, string(e.Categories), formatNullableTime(e.UpdatedAt), string(e.Enclosures),
-			string(e.Authors), string(e.Links), string(e.Contributors), e.Rights, string(e.Source),
-		)
-		if err != nil {
-			return 0, fmt.Errorf("insert entry: %w", err)
-		}
-		ra, _ := result.RowsAffected()
-		inserted += int(ra)
+		return 0, err
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -331,24 +321,7 @@ func (s *SQLiteStore) GetEntry(ctx context.Context, id int64) (*core.Entry, erro
 
 // Results are always ordered by fetched_at DESC (newest first).
 func (s *SQLiteStore) ListEntries(ctx context.Context, filter core.EntryFilter) ([]*core.Entry, error) {
-	query := `SELECT ` + entryColumns + ` FROM entries`
-	conditions, args := buildEntryConditions(filter)
-
-	if len(conditions) > 0 {
-		query += ` WHERE ` + strings.Join(conditions, ` AND `)
-	}
-
-	query += ` ORDER BY fetched_at DESC`
-
-	if filter.Limit > 0 {
-		query += ` LIMIT ?`
-		args = append(args, filter.Limit)
-	}
-
-	if filter.Offset > 0 {
-		query += ` OFFSET ?`
-		args = append(args, filter.Offset)
-	}
+	query, args := newEntryFilterQuery(filter).buildSelectEntries(filter)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -359,11 +332,7 @@ func (s *SQLiteStore) ListEntries(ctx context.Context, filter core.EntryFilter) 
 
 // CountEntries returns the total number of entries matching the filter.
 func (s *SQLiteStore) CountEntries(ctx context.Context, filter core.EntryFilter) (int, error) {
-	query := `SELECT COUNT(*) FROM entries`
-	conditions, args := buildEntryConditions(filter)
-	if len(conditions) > 0 {
-		query += ` WHERE ` + strings.Join(conditions, ` AND `)
-	}
+	query, args := newEntryFilterQuery(filter).buildCountEntries()
 
 	var count int
 	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
@@ -373,28 +342,8 @@ func (s *SQLiteStore) CountEntries(ctx context.Context, filter core.EntryFilter)
 }
 
 func buildEntryConditions(filter core.EntryFilter) ([]string, []any) {
-	var args []any
-	var conditions []string
-
-	if filter.FeedID != nil {
-		conditions = append(conditions, `feed_id = ?`)
-		args = append(args, *filter.FeedID)
-	}
-
-	if filter.UnreadOnly {
-		conditions = append(conditions, `read_at IS NULL`)
-	}
-
-	if filter.Tag != "" {
-		conditions = append(conditions, `feed_id IN (SELECT ft.feed_id FROM feed_tags ft JOIN tags t ON t.id = ft.tag_id WHERE t.name = ?)`)
-		args = append(args, filter.Tag)
-	}
-
-	if filter.StarredOnly {
-		conditions = append(conditions, `starred_at IS NOT NULL`)
-	}
-
-	return conditions, args
+	query := newEntryFilterQuery(filter)
+	return query.conditions, query.args
 }
 
 // scanner is a minimal interface satisfied by both *sql.Row and *sql.Rows,
@@ -570,6 +519,61 @@ func collectTags(rows *sql.Rows) ([]core.Tag, error) {
 	return tags, rows.Err()
 }
 
+func newEntryFilterQuery(filter core.EntryFilter) entryFilterQuery {
+	query := entryFilterQuery{}
+
+	if filter.FeedID != nil {
+		query.add(`feed_id = ?`, *filter.FeedID)
+	}
+	if filter.UnreadOnly {
+		query.add(`read_at IS NULL`)
+	}
+	if filter.Tag != "" {
+		query.add(`feed_id IN (SELECT ft.feed_id FROM feed_tags ft JOIN tags t ON t.id = ft.tag_id WHERE t.name = ?)`, filter.Tag)
+	}
+	if filter.StarredOnly {
+		query.add(`starred_at IS NOT NULL`)
+	}
+
+	return query
+}
+
+func (q *entryFilterQuery) add(condition string, args ...any) {
+	q.conditions = append(q.conditions, condition)
+	q.args = append(q.args, args...)
+}
+
+func (q entryFilterQuery) buildSelectEntries(filter core.EntryFilter) (string, []any) {
+	query := `SELECT ` + entryColumns + ` FROM entries` + q.whereClause() + ` ORDER BY fetched_at DESC, id DESC`
+	args := q.cloneArgs()
+
+	if filter.Limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, filter.Limit)
+	}
+	if filter.Offset > 0 {
+		query += ` OFFSET ?`
+		args = append(args, filter.Offset)
+	}
+
+	return query, args
+}
+
+func (q entryFilterQuery) buildCountEntries() (string, []any) {
+	return `SELECT COUNT(*) FROM entries` + q.whereClause(), q.cloneArgs()
+}
+
+func (q entryFilterQuery) whereClause() string {
+	if len(q.conditions) == 0 {
+		return ""
+	}
+	return ` WHERE ` + strings.Join(q.conditions, ` AND `)
+}
+
+func (q entryFilterQuery) cloneArgs() []any {
+	return append([]any(nil), q.args...)
+}
+
 // UpdateFeed updates mutable feed fields. Only non-nil fields in the update
 // struct are applied.
 func (s *SQLiteStore) UpdateFeed(ctx context.Context, id int64, update core.FeedUpdate) error {
@@ -622,60 +626,49 @@ func buildIDPlaceholders(ids []int64) (string, []any) {
 	return strings.Join(placeholders, ", "), args
 }
 
-func (s *SQLiteStore) setEntriesColumn(ctx context.Context, column string, value any, ids []int64) error {
+func buildEntriesColumnUpdate(column string, value any, ids []int64) (string, []any) {
+	placeholders, args := buildIDPlaceholders(ids)
+	if value == nil {
+		return fmt.Sprintf(`UPDATE entries SET %s = NULL WHERE id IN (%s)`, column, placeholders), args
+	}
+	return fmt.Sprintf(`UPDATE entries SET %s = ? WHERE id IN (%s)`, column, placeholders), append([]any{value}, args...)
+}
+
+func (s *SQLiteStore) updateEntriesColumn(ctx context.Context, column string, value any, ids []int64) error {
 	if len(ids) == 0 {
 		return nil
 	}
 
-	placeholders, args := buildIDPlaceholders(ids)
-	args = append([]any{value}, args...)
-
-	query := fmt.Sprintf(`UPDATE entries SET %s = ? WHERE id IN (%s)`, column, placeholders)
+	query, args := buildEntriesColumnUpdate(column, value, ids)
 	_, err := s.db.ExecContext(ctx, query, args...)
 	return err
 }
 
-func (s *SQLiteStore) clearEntriesColumn(ctx context.Context, column string, ids []int64) error {
-	if len(ids) == 0 {
-		return nil
+func (s *SQLiteStore) updateEntryState(ctx context.Context, column string, value any, ids []int64, label string) error {
+	if err := s.updateEntriesColumn(ctx, column, value, ids); err != nil {
+		return fmt.Errorf("%s: %w", label, err)
 	}
-
-	placeholders, args := buildIDPlaceholders(ids)
-	query := fmt.Sprintf(`UPDATE entries SET %s = NULL WHERE id IN (%s)`, column, placeholders)
-	_, err := s.db.ExecContext(ctx, query, args...)
-	return err
+	return nil
 }
 
 // MarkEntryRead sets the read_at timestamp on the given entry.
 func (s *SQLiteStore) MarkEntryRead(ctx context.Context, id int64) error {
-	if err := s.setEntriesColumn(ctx, "read_at", nowRFC3339(), []int64{id}); err != nil {
-		return fmt.Errorf("mark entry read: %w", err)
-	}
-	return nil
+	return s.updateEntryState(ctx, "read_at", nowRFC3339(), []int64{id}, "mark entry read")
 }
 
 // MarkEntriesRead sets the read_at timestamp on the given entries.
 func (s *SQLiteStore) MarkEntriesRead(ctx context.Context, ids []int64) error {
-	if err := s.setEntriesColumn(ctx, "read_at", nowRFC3339(), ids); err != nil {
-		return fmt.Errorf("mark entries read: %w", err)
-	}
-	return nil
+	return s.updateEntryState(ctx, "read_at", nowRFC3339(), ids, "mark entries read")
 }
 
 // MarkEntryUnread clears the read_at timestamp on the given entry.
 func (s *SQLiteStore) MarkEntryUnread(ctx context.Context, id int64) error {
-	if err := s.clearEntriesColumn(ctx, "read_at", []int64{id}); err != nil {
-		return fmt.Errorf("mark entry unread: %w", err)
-	}
-	return nil
+	return s.updateEntryState(ctx, "read_at", nil, []int64{id}, "mark entry unread")
 }
 
 // MarkEntriesUnread clears the read_at timestamp on the given entries.
 func (s *SQLiteStore) MarkEntriesUnread(ctx context.Context, ids []int64) error {
-	if err := s.clearEntriesColumn(ctx, "read_at", ids); err != nil {
-		return fmt.Errorf("mark entries unread: %w", err)
-	}
-	return nil
+	return s.updateEntryState(ctx, "read_at", nil, ids, "mark entries unread")
 }
 
 // AddTag creates a tag (if it doesn't exist) and associates it with a feed.
@@ -798,34 +791,22 @@ func (s *SQLiteStore) CountSearchEntries(ctx context.Context, query string) (int
 
 // StarEntry sets the starred_at timestamp on the given entry.
 func (s *SQLiteStore) StarEntry(ctx context.Context, id int64) error {
-	if err := s.setEntriesColumn(ctx, "starred_at", nowRFC3339(), []int64{id}); err != nil {
-		return fmt.Errorf("star entry: %w", err)
-	}
-	return nil
+	return s.updateEntryState(ctx, "starred_at", nowRFC3339(), []int64{id}, "star entry")
 }
 
 // StarEntries sets the starred_at timestamp on the given entries.
 func (s *SQLiteStore) StarEntries(ctx context.Context, ids []int64) error {
-	if err := s.setEntriesColumn(ctx, "starred_at", nowRFC3339(), ids); err != nil {
-		return fmt.Errorf("star entries: %w", err)
-	}
-	return nil
+	return s.updateEntryState(ctx, "starred_at", nowRFC3339(), ids, "star entries")
 }
 
 // UnstarEntry clears the starred_at timestamp on the given entry.
 func (s *SQLiteStore) UnstarEntry(ctx context.Context, id int64) error {
-	if err := s.clearEntriesColumn(ctx, "starred_at", []int64{id}); err != nil {
-		return fmt.Errorf("unstar entry: %w", err)
-	}
-	return nil
+	return s.updateEntryState(ctx, "starred_at", nil, []int64{id}, "unstar entry")
 }
 
 // UnstarEntries clears the starred_at timestamp on the given entries.
 func (s *SQLiteStore) UnstarEntries(ctx context.Context, ids []int64) error {
-	if err := s.clearEntriesColumn(ctx, "starred_at", ids); err != nil {
-		return fmt.Errorf("unstar entries: %w", err)
-	}
-	return nil
+	return s.updateEntryState(ctx, "starred_at", nil, ids, "unstar entries")
 }
 
 // maxErrorCount is the number of consecutive failures before a feed is
@@ -890,21 +871,10 @@ func (s *SQLiteStore) FeedStats(ctx context.Context) ([]core.FeedStats, error) {
 
 	var stats []core.FeedStats
 	for rows.Next() {
-		var st core.FeedStats
-		var fetchedAt *string
-		var disabled int
-		if err := rows.Scan(
-			&st.FeedID, &st.Title, &st.URL,
-			&st.TotalCount, &st.UnreadCount, &st.StarredCount,
-			&fetchedAt, &st.ErrorCount, &st.LastError, &disabled,
-		); err != nil {
-			return nil, fmt.Errorf("scan feed stats: %w", err)
+		st, err := scanFeedStats(rows)
+		if err != nil {
+			return nil, err
 		}
-		if fetchedAt != nil {
-			t, _ := time.Parse(time.RFC3339, *fetchedAt)
-			st.FetchedAt = &t
-		}
-		st.Disabled = disabled != 0
 		stats = append(stats, st)
 	}
 	return stats, rows.Err()
@@ -935,4 +905,61 @@ func (s *SQLiteStore) FindDuplicateEntries(ctx context.Context, entryID int64) (
 		return nil, fmt.Errorf("find duplicates: %w", err)
 	}
 	return collectEntries(rows)
+}
+
+func addEntriesTx(ctx context.Context, tx *sql.Tx, entries []*core.Entry) (int, error) {
+	stmt, err := tx.PrepareContext(ctx, insertEntrySQL)
+	if err != nil {
+		return 0, fmt.Errorf("prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	inserted := 0
+	for _, entry := range entries {
+		count, err := insertEntry(ctx, stmt, entry)
+		if err != nil {
+			return 0, err
+		}
+		inserted += count
+	}
+
+	return inserted, nil
+}
+
+func insertEntry(ctx context.Context, stmt *sql.Stmt, entry *core.Entry) (int, error) {
+	result, err := stmt.ExecContext(ctx,
+		entry.FeedID, entry.GUID, entry.Title, entry.Link, entry.Summary, formatNullableTime(entry.PublishedAt),
+		entry.Content, entry.Author, entry.ImageURL, string(entry.Categories), formatNullableTime(entry.UpdatedAt), string(entry.Enclosures),
+		string(entry.Authors), string(entry.Links), string(entry.Contributors), entry.Rights, string(entry.Source),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("insert entry: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("rows affected: %w", err)
+	}
+	return int(rowsAffected), nil
+}
+
+func scanFeedStats(s scanner) (core.FeedStats, error) {
+	var stats core.FeedStats
+	var fetchedAt *string
+	var disabled int
+
+	if err := s.Scan(
+		&stats.FeedID, &stats.Title, &stats.URL,
+		&stats.TotalCount, &stats.UnreadCount, &stats.StarredCount,
+		&fetchedAt, &stats.ErrorCount, &stats.LastError, &disabled,
+	); err != nil {
+		return core.FeedStats{}, fmt.Errorf("scan feed stats: %w", err)
+	}
+
+	var err error
+	if stats.FetchedAt, err = parseNullableTime(fetchedAt, "fetched_at"); err != nil {
+		return core.FeedStats{}, err
+	}
+	stats.Disabled = disabled != 0
+
+	return stats, nil
 }

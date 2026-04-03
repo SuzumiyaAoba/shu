@@ -544,6 +544,24 @@ func TestMarkEntriesReadUnread(t *testing.T) {
 	}
 }
 
+func TestEntryStateMutationsEmptyIDs(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	if err := s.MarkEntriesRead(ctx, nil); err != nil {
+		t.Fatalf("MarkEntriesRead(nil) failed: %v", err)
+	}
+	if err := s.MarkEntriesUnread(ctx, []int64{}); err != nil {
+		t.Fatalf("MarkEntriesUnread(empty) failed: %v", err)
+	}
+	if err := s.StarEntries(ctx, nil); err != nil {
+		t.Fatalf("StarEntries(nil) failed: %v", err)
+	}
+	if err := s.UnstarEntries(ctx, []int64{}); err != nil {
+		t.Fatalf("UnstarEntries(empty) failed: %v", err)
+	}
+}
+
 func TestTags(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -917,6 +935,85 @@ func TestCountEntries(t *testing.T) {
 	}
 	if unread != 1 {
 		t.Errorf("unread = %d, want 1", unread)
+	}
+}
+
+func TestListEntriesAndCountEntriesCombinedFilters(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed1 := &core.Feed{URL: "https://a.com/feed", Title: "A"}
+	feed2 := &core.Feed{URL: "https://b.com/feed", Title: "B"}
+	_ = s.AddFeed(ctx, feed1)
+	_ = s.AddFeed(ctx, feed2)
+
+	_, _ = s.AddEntries(ctx, []*core.Entry{
+		{FeedID: feed1.ID, GUID: "a1", Title: "A1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed1.ID, GUID: "a2", Title: "A2", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed2.ID, GUID: "b1", Title: "B1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+	})
+
+	_ = s.AddTag(ctx, feed1.ID, "tech")
+	_ = s.AddTag(ctx, feed2.ID, "news")
+
+	allEntries, err := s.ListEntries(ctx, core.EntryFilter{Limit: 10})
+	if err != nil {
+		t.Fatalf("ListEntries failed: %v", err)
+	}
+	if len(allEntries) != 3 {
+		t.Fatalf("got %d entries, want 3", len(allEntries))
+	}
+
+	var feed1ReadID int64
+	for _, entry := range allEntries {
+		if entry.FeedID == feed1.ID {
+			feed1ReadID = entry.ID
+			break
+		}
+	}
+	if feed1ReadID == 0 {
+		t.Fatal("expected a feed1 entry ID")
+	}
+
+	if err := s.MarkEntryRead(ctx, feed1ReadID); err != nil {
+		t.Fatalf("MarkEntryRead failed: %v", err)
+	}
+	if err := s.StarEntry(ctx, feed1ReadID); err != nil {
+		t.Fatalf("StarEntry failed: %v", err)
+	}
+
+	feed1ID := feed1.ID
+	feed2ID := feed2.ID
+	testCases := []struct {
+		name   string
+		filter core.EntryFilter
+		want   int
+	}{
+		{name: "all", filter: core.EntryFilter{}, want: 3},
+		{name: "feed1", filter: core.EntryFilter{FeedID: &feed1ID}, want: 2},
+		{name: "tag", filter: core.EntryFilter{Tag: "tech"}, want: 2},
+		{name: "unread", filter: core.EntryFilter{UnreadOnly: true}, want: 2},
+		{name: "starred", filter: core.EntryFilter{StarredOnly: true}, want: 1},
+		{name: "feed1 unread tag", filter: core.EntryFilter{FeedID: &feed1ID, UnreadOnly: true, Tag: "tech"}, want: 1},
+		{name: "feed1 starred tag", filter: core.EntryFilter{FeedID: &feed1ID, StarredOnly: true, Tag: "tech"}, want: 1},
+		{name: "feed2 tech", filter: core.EntryFilter{FeedID: &feed2ID, Tag: "tech"}, want: 0},
+	}
+
+	for _, tc := range testCases {
+		entries, err := s.ListEntries(ctx, tc.filter)
+		if err != nil {
+			t.Fatalf("%s: ListEntries failed: %v", tc.name, err)
+		}
+		count, err := s.CountEntries(ctx, tc.filter)
+		if err != nil {
+			t.Fatalf("%s: CountEntries failed: %v", tc.name, err)
+		}
+		if len(entries) != tc.want {
+			t.Fatalf("%s: got %d entries, want %d", tc.name, len(entries), tc.want)
+		}
+		if count != tc.want {
+			t.Fatalf("%s: count = %d, want %d", tc.name, count, tc.want)
+		}
 	}
 }
 
