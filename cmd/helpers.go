@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
 
@@ -63,6 +64,12 @@ func writeEntryPageSummary(w io.Writer, page *core.EntryPage, noun string) error
 	}
 	_, err := fmt.Fprintln(w)
 	return err
+}
+
+func addStructuredOutputFlags(cmd *cobra.Command, outputJSON, outputYAML *bool) {
+	cmd.Flags().BoolVar(outputJSON, "json", false, "output as JSON")
+	cmd.Flags().BoolVar(outputYAML, "yaml", false, "output as YAML")
+	cmd.MarkFlagsMutuallyExclusive("json", "yaml")
 }
 
 func writeStructuredOutput(w io.Writer, v any, outputJSON, outputYAML bool) (bool, error) {

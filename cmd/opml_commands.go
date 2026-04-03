@@ -57,9 +57,7 @@ func newImportCmd(getService opmlServiceGetter) *cobra.Command {
 		},
 	}
 
-	importCmd.Flags().BoolVar(&importJSON, "json", false, "output as JSON")
-	importCmd.Flags().BoolVar(&importYAML, "yaml", false, "output as YAML")
-	importCmd.MarkFlagsMutuallyExclusive("json", "yaml")
+	addStructuredOutputFlags(importCmd, &importJSON, &importYAML)
 	return importCmd
 }
 

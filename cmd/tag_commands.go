@@ -104,8 +104,6 @@ func newTagsCmd(getService tagServiceGetter) *cobra.Command {
 		},
 	}
 
-	tagsCmd.Flags().BoolVar(&tagsJSON, "json", false, "output as JSON")
-	tagsCmd.Flags().BoolVar(&tagsYAML, "yaml", false, "output as YAML")
-	tagsCmd.MarkFlagsMutuallyExclusive("json", "yaml")
+	addStructuredOutputFlags(tagsCmd, &tagsJSON, &tagsYAML)
 	return tagsCmd
 }

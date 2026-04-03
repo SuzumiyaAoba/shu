@@ -41,9 +41,7 @@ func newStatsCmd(getService maintenanceServiceGetter) *cobra.Command {
 		},
 	}
 
-	statsCmd.Flags().BoolVar(&statsJSON, "json", false, "output as JSON")
-	statsCmd.Flags().BoolVar(&statsYAML, "yaml", false, "output as YAML")
-	statsCmd.MarkFlagsMutuallyExclusive("json", "yaml")
+	addStructuredOutputFlags(statsCmd, &statsJSON, &statsYAML)
 	return statsCmd
 }
 

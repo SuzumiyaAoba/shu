@@ -54,9 +54,7 @@ func newAddCmd(getService feedServiceGetter) *cobra.Command {
 	}
 
 	addCmd.Flags().StringVar(&addTitle, "title", "", "override feed title")
-	addCmd.Flags().BoolVar(&addJSON, "json", false, "output as JSON")
-	addCmd.Flags().BoolVar(&addYAML, "yaml", false, "output as YAML")
-	addCmd.MarkFlagsMutuallyExclusive("json", "yaml")
+	addStructuredOutputFlags(addCmd, &addJSON, &addYAML)
 	return addCmd
 }
 
@@ -85,9 +83,7 @@ func newListCmd(getService feedServiceGetter) *cobra.Command {
 		},
 	}
 
-	listCmd.Flags().BoolVar(&listJSON, "json", false, "output as JSON")
-	listCmd.Flags().BoolVar(&listYAML, "yaml", false, "output as YAML")
-	listCmd.MarkFlagsMutuallyExclusive("json", "yaml")
+	addStructuredOutputFlags(listCmd, &listJSON, &listYAML)
 	return listCmd
 }
 
@@ -133,9 +129,7 @@ func newFetchCmd(getService feedServiceGetter) *cobra.Command {
 	}
 
 	fetchCmd.Flags().Int64Var(&fetchFeedID, "feed-id", 0, "fetch a specific feed by ID")
-	fetchCmd.Flags().BoolVar(&fetchJSON, "json", false, "output as JSON")
-	fetchCmd.Flags().BoolVar(&fetchYAML, "yaml", false, "output as YAML")
-	fetchCmd.MarkFlagsMutuallyExclusive("json", "yaml")
+	addStructuredOutputFlags(fetchCmd, &fetchJSON, &fetchYAML)
 	return fetchCmd
 }
 
@@ -171,9 +165,7 @@ func newDiscoverCmd(getService feedServiceGetter) *cobra.Command {
 		},
 	}
 
-	discoverCmd.Flags().BoolVar(&discoverJSON, "json", false, "output as JSON")
-	discoverCmd.Flags().BoolVar(&discoverYAML, "yaml", false, "output as YAML")
-	discoverCmd.MarkFlagsMutuallyExclusive("json", "yaml")
+	addStructuredOutputFlags(discoverCmd, &discoverJSON, &discoverYAML)
 	return discoverCmd
 }
 
@@ -329,8 +321,6 @@ func newRemoveDeadFeedsCmd(getService feedServiceGetter) *cobra.Command {
 	}
 
 	removeDeadCmd.Flags().BoolVar(&dryRun, "dry-run", false, "show dead feeds without removing them")
-	removeDeadCmd.Flags().BoolVar(&outputJSON, "json", false, "output as JSON")
-	removeDeadCmd.Flags().BoolVar(&outputYAML, "yaml", false, "output as YAML")
-	removeDeadCmd.MarkFlagsMutuallyExclusive("json", "yaml")
+	addStructuredOutputFlags(removeDeadCmd, &outputJSON, &outputYAML)
 	return removeDeadCmd
 }

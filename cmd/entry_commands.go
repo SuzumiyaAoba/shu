@@ -91,13 +91,11 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 	entriesCmd.Flags().IntVar(&entriesOffset, "offset", 0, "skip the first N entries")
 	entriesCmd.Flags().IntVar(&entriesPage, "page", 0, "1-based page number (uses --limit)")
 	entriesCmd.Flags().BoolVar(&entriesPageInfo, "page-info", false, "include pagination metadata")
-	entriesCmd.Flags().BoolVar(&entriesJSON, "json", false, "output as JSON")
-	entriesCmd.Flags().BoolVar(&entriesYAML, "yaml", false, "output as YAML")
+	addStructuredOutputFlags(entriesCmd, &entriesJSON, &entriesYAML)
 	entriesCmd.Flags().BoolVar(&entriesUnread, "unread", false, "show only unread entries")
 	entriesCmd.Flags().BoolVar(&entriesStarred, "starred", false, "show only starred entries")
 	entriesCmd.Flags().StringVar(&entriesTag, "tag", "", "filter by feed tag")
 	entriesCmd.Flags().StringVar(&entriesFormat, "format", "", "output format: markdown")
-	entriesCmd.MarkFlagsMutuallyExclusive("json", "yaml")
 	entriesCmd.MarkFlagsMutuallyExclusive("offset", "page")
 	return entriesCmd
 }
@@ -342,9 +340,7 @@ func newSearchCmd(getService entryServiceGetter) *cobra.Command {
 	searchCmd.Flags().IntVar(&searchOffset, "offset", 0, "skip the first N results")
 	searchCmd.Flags().IntVar(&searchPage, "page", 0, "1-based page number (uses --limit)")
 	searchCmd.Flags().BoolVar(&searchPageInfo, "page-info", false, "include pagination metadata")
-	searchCmd.Flags().BoolVar(&searchJSON, "json", false, "output as JSON")
-	searchCmd.Flags().BoolVar(&searchYAML, "yaml", false, "output as YAML")
-	searchCmd.MarkFlagsMutuallyExclusive("json", "yaml")
+	addStructuredOutputFlags(searchCmd, &searchJSON, &searchYAML)
 	searchCmd.MarkFlagsMutuallyExclusive("offset", "page")
 	return searchCmd
 }
@@ -388,8 +384,6 @@ func newDuplicatesCmd(getService entryServiceGetter) *cobra.Command {
 		},
 	}
 
-	duplicatesCmd.Flags().BoolVar(&duplicatesJSON, "json", false, "output as JSON")
-	duplicatesCmd.Flags().BoolVar(&duplicatesYAML, "yaml", false, "output as YAML")
-	duplicatesCmd.MarkFlagsMutuallyExclusive("json", "yaml")
+	addStructuredOutputFlags(duplicatesCmd, &duplicatesJSON, &duplicatesYAML)
 	return duplicatesCmd
 }
