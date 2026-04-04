@@ -9,9 +9,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/core/coretest"
 )
 
 func TestMarkReadUnread(t *testing.T) {
@@ -140,67 +140,12 @@ func TestMarkEntriesUnreadWrapsStoreError(t *testing.T) {
 }
 
 type entryStateErrorStore struct {
+	coretest.BaseFakeStore
 	err error
 }
 
 func newEntryStateErrorStore(err error) *entryStateErrorStore {
 	return &entryStateErrorStore{err: err}
-}
-
-func (s *entryStateErrorStore) AddFeed(context.Context, *core.Feed) error { return nil }
-
-func (s *entryStateErrorStore) GetFeed(context.Context, int64) (*core.Feed, error) {
-	return nil, nil
-}
-
-func (s *entryStateErrorStore) GetFeedByURL(context.Context, string) (*core.Feed, error) {
-	return nil, nil
-}
-
-func (s *entryStateErrorStore) ListFeeds(context.Context) ([]*core.Feed, error) { return nil, nil }
-
-func (s *entryStateErrorStore) RemoveFeed(context.Context, int64) error { return nil }
-
-func (s *entryStateErrorStore) UpdateFeed(context.Context, int64, core.FeedUpdate) error { return nil }
-
-func (s *entryStateErrorStore) UpdateFeedFetchedAt(context.Context, int64) error { return nil }
-
-func (s *entryStateErrorStore) UpdateFeedCacheHeaders(context.Context, int64, string, string) error {
-	return nil
-}
-
-func (s *entryStateErrorStore) RecordFeedError(context.Context, int64, string) error { return nil }
-
-func (s *entryStateErrorStore) ResetFeedError(context.Context, int64) error { return nil }
-
-func (s *entryStateErrorStore) SetFeedDisabled(context.Context, int64, bool) error { return nil }
-
-func (s *entryStateErrorStore) AddEntries(context.Context, []*core.Entry) (int, error) { return 0, nil }
-
-func (s *entryStateErrorStore) GetEntry(context.Context, int64) (*core.Entry, error) { return nil, nil }
-
-func (s *entryStateErrorStore) ListEntries(context.Context, core.EntryFilter) ([]*core.Entry, error) {
-	return nil, nil
-}
-
-func (s *entryStateErrorStore) CountEntries(context.Context, core.EntryFilter) (int, error) {
-	return 0, nil
-}
-
-func (s *entryStateErrorStore) SearchEntries(context.Context, string, int) ([]*core.Entry, error) {
-	return nil, nil
-}
-
-func (s *entryStateErrorStore) SearchEntriesPage(context.Context, string, int, int) ([]*core.Entry, error) {
-	return nil, nil
-}
-
-func (s *entryStateErrorStore) CountSearchEntries(context.Context, string) (int, error) {
-	return 0, nil
-}
-
-func (s *entryStateErrorStore) FindDuplicateEntries(context.Context, int64) ([]*core.Entry, error) {
-	return nil, nil
 }
 
 func (s *entryStateErrorStore) MarkEntryRead(context.Context, int64) error { return s.err }
@@ -218,25 +163,3 @@ func (s *entryStateErrorStore) StarEntries(context.Context, []int64) error { ret
 func (s *entryStateErrorStore) UnstarEntry(context.Context, int64) error { return s.err }
 
 func (s *entryStateErrorStore) UnstarEntries(context.Context, []int64) error { return s.err }
-
-func (s *entryStateErrorStore) AddTag(context.Context, int64, string) error { return nil }
-
-func (s *entryStateErrorStore) RemoveTag(context.Context, int64, string) error { return nil }
-
-func (s *entryStateErrorStore) ListTags(context.Context, int64) ([]core.Tag, error) { return nil, nil }
-
-func (s *entryStateErrorStore) ListFeedTags(context.Context) (map[int64][]core.Tag, error) {
-	return nil, nil
-}
-
-func (s *entryStateErrorStore) ListAllTags(context.Context) ([]core.Tag, error) { return nil, nil }
-
-func (s *entryStateErrorStore) ListFeedsByTag(context.Context, string) ([]*core.Feed, error) {
-	return nil, nil
-}
-
-func (s *entryStateErrorStore) FeedStats(context.Context) ([]core.FeedStats, error) { return nil, nil }
-
-func (s *entryStateErrorStore) CleanupEntries(context.Context, time.Time) (int, error) { return 0, nil }
-
-func (s *entryStateErrorStore) Close() error { return nil }
