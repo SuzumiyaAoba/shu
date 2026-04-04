@@ -97,7 +97,7 @@ func (d *httpFeedDownloader) download(ctx context.Context, feed *Feed) (*fetched
 }
 
 func (d *httpFeedDownloader) handleFeedDownloadError(ctx context.Context, feed *Feed, err error) error {
-	fetchErr := fmt.Errorf("fetch feed %s: %w", feed.URL, err)
+	fetchErr := &FeedError{FeedID: feed.ID, FeedURL: feed.URL, Op: "fetch", Err: err}
 	if ctx.Err() != nil {
 		return fetchErr
 	}
