@@ -129,18 +129,37 @@ func newFetchCmd(getService feedServiceGetter) *cobra.Command {
 				}
 			}
 
-			count, err := svc.FetchAllWithObserver(ctx, observer)
+			count, fetchErr := svc.FetchAllWithObserver(ctx, observer)
 			if progress != nil {
 				progress.Wait()
 			}
-			if err != nil {
-				return err
+			// A context cancellation is a hard stop — return immediately.
+			if fetchErr != nil && ctx.Err() != nil {
+				return fetchErr
 			}
 			if handled, err := output.encode(cmd.OutOrStdout(), map[string]int{"count": count}); handled || err != nil {
 				return err
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count)
-			return err
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count); err != nil {
+				return err
+			}
+			// Print per-feed warnings for partial failures so the user can see
+			// which feeds failed without aborting the command.
+			if fetchErr != nil {
+				type multiErr interface{ Unwrap() []error }
+				if me, ok := fetchErr.(multiErr); ok {
+					for _, e := range me.Unwrap() {
+						if err := writeWarning(cmd.ErrOrStderr(), "%v", e); err != nil {
+							return err
+						}
+					}
+				} else {
+					if err := writeWarning(cmd.ErrOrStderr(), "%v", fetchErr); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
 		},
 	}
 

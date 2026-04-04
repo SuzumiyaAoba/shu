@@ -102,7 +102,7 @@ func (d *httpFeedDownloader) handleFeedDownloadError(ctx context.Context, feed *
 		return fetchErr
 	}
 	if recErr := d.store.RecordFeedError(ctx, feed.ID, err.Error()); recErr != nil {
-		d.logger.Warn("failed to record feed error", "id", feed.ID, "error", recErr)
+		d.logger.With("feed_id", feed.ID).Warn("failed to record feed error", "error", recErr)
 	}
 	return fetchErr
 }

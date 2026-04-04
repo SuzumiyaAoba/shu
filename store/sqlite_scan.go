@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"iter"
 	"time"
 
 	"github.com/SuzumiyaAoba/shu/core"
@@ -156,32 +157,70 @@ func fetchEntry(s scanner, label string) (*core.Entry, error) {
 	return entry, nil
 }
 
-func collectFeeds(rows *sql.Rows) ([]*core.Feed, error) {
+// iterRows returns an [iter.Seq2] iterator over database rows. Each call to
+// yield delivers the next scanned value and any scan error. The caller must
+// return false from yield to stop early; the rows are closed when iteration
+// ends or the iterator function returns.
+//
+// This is the streaming counterpart to [collectRows]: use it when you want to
+// process rows one-at-a-time without loading the full result set into memory.
+func iterRows[T any](rows *sql.Rows, scan func(scanner) (*T, error)) iter.Seq2[*T, error] {
+	return func(yield func(*T, error) bool) {
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			v, err := scan(rows)
+			if !yield(v, err) {
+				return
+			}
+			if err != nil {
+				return
+			}
+		}
+		if err := rows.Err(); err != nil {
+			yield(nil, err)
+		}
+	}
+}
+
+// collectRows iterates all rows, scans each into a *T via scan, and returns the
+// collected slice. It closes rows on return. This is a generic helper that
+// eliminates the identical boilerplate present in collectFeeds, collectEntries,
+// etc.
+func collectRows[T any](rows *sql.Rows, scan func(scanner) (*T, error)) ([]*T, error) {
 	defer func() { _ = rows.Close() }()
 
-	var feeds []*core.Feed
+	var result []*T
 	for rows.Next() {
-		f, err := scanFeed(rows)
+		v, err := scan(rows)
 		if err != nil {
 			return nil, err
 		}
-		feeds = append(feeds, f)
+		result = append(result, v)
 	}
-	return feeds, rows.Err()
+	return result, rows.Err()
+}
+
+// collectValues is like collectRows but for value types (non-pointer).
+func collectValues[T any](rows *sql.Rows, scan func(scanner) (T, error)) ([]T, error) {
+	defer func() { _ = rows.Close() }()
+
+	var result []T
+	for rows.Next() {
+		v, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, v)
+	}
+	return result, rows.Err()
+}
+
+func collectFeeds(rows *sql.Rows) ([]*core.Feed, error) {
+	return collectRows(rows, scanFeed)
 }
 
 func collectEntries(rows *sql.Rows) ([]*core.Entry, error) {
-	defer func() { _ = rows.Close() }()
-
-	var entries []*core.Entry
-	for rows.Next() {
-		e, err := scanEntry(rows)
-		if err != nil {
-			return nil, err
-		}
-		entries = append(entries, e)
-	}
-	return entries, rows.Err()
+	return collectRows(rows, scanEntry)
 }
 
 func toNilIfEmpty(s string) []byte {
@@ -191,16 +230,14 @@ func toNilIfEmpty(s string) []byte {
 	return []byte(s)
 }
 
-func collectTags(rows *sql.Rows) ([]core.Tag, error) {
-	defer func() { _ = rows.Close() }()
-
-	var tags []core.Tag
-	for rows.Next() {
-		var t core.Tag
-		if err := rows.Scan(&t.ID, &t.Name); err != nil {
-			return nil, fmt.Errorf("scan tag: %w", err)
-		}
-		tags = append(tags, t)
+func scanTag(s scanner) (core.Tag, error) {
+	var t core.Tag
+	if err := s.Scan(&t.ID, &t.Name); err != nil {
+		return core.Tag{}, fmt.Errorf("scan tag: %w", err)
 	}
-	return tags, rows.Err()
+	return t, nil
+}
+
+func collectTags(rows *sql.Rows) ([]core.Tag, error) {
+	return collectValues(rows, scanTag)
 }

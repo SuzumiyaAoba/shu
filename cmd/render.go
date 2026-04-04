@@ -19,194 +19,136 @@ func useStyled(w io.Writer) bool {
 	return !noColor && isTTY(w)
 }
 
-// --- Feed table ---
+// --- Generic table renderer ---
 
-func renderFeedsTable(w io.Writer, feeds []*core.Feed) error {
-	if useStyled(w) {
-		return renderFeedsTableStyled(w, feeds)
-	}
-	return renderFeedsTablePlain(w, feeds)
+// tableDefinition describes the columns and row-conversion for a table.
+type tableDefinition[T any] struct {
+	headers []string
+	toRow   func(T) []string
 }
 
-func renderFeedsTablePlain(w io.Writer, feeds []*core.Feed) error {
+// renderTable dispatches to the styled or plain renderer depending on the writer.
+func renderTable[T any](w io.Writer, items []T, def tableDefinition[T]) error {
+	if useStyled(w) {
+		return renderTableStyled(w, items, def)
+	}
+	return renderTablePlain(w, items, def)
+}
+
+func renderTablePlain[T any](w io.Writer, items []T, def tableDefinition[T]) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "ID\tTITLE\tURL\tFETCHED\tSTATUS"); err != nil {
+	header := ""
+	for i, h := range def.headers {
+		if i > 0 {
+			header += "\t"
+		}
+		header += h
+	}
+	if _, err := fmt.Fprintln(tw, header); err != nil {
 		return err
 	}
-	for _, f := range feeds {
-		fetched := "-"
-		if f.FetchedAt != nil {
-			fetched = f.FetchedAt.Format("2006-01-02 15:04")
+	for _, item := range items {
+		row := def.toRow(item)
+		line := ""
+		for i, cell := range row {
+			if i > 0 {
+				line += "\t"
+			}
+			line += cell
 		}
-		status := feedStatus(f.Disabled, f.ErrorCount)
-		if _, err := fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\n", f.ID, f.Title, f.URL, fetched, status); err != nil {
+		if _, err := fmt.Fprintln(tw, line); err != nil {
 			return err
 		}
 	}
 	return tw.Flush()
 }
 
-func renderFeedsTableStyled(w io.Writer, feeds []*core.Feed) error {
-	rows := make([][]string, 0, len(feeds))
-	for _, f := range feeds {
+func renderTableStyled[T any](w io.Writer, items []T, def tableDefinition[T]) error {
+	rows := make([][]string, 0, len(items))
+	for _, item := range items {
+		rows = append(rows, def.toRow(item))
+	}
+	_, err := fmt.Fprintln(w, newStyledTable(def.headers...).Rows(rows...).Render())
+	return err
+}
+
+// --- Table definitions ---
+
+var feedTableDef = tableDefinition[*core.Feed]{
+	headers: []string{"ID", "TITLE", "URL", "FETCHED", "STATUS"},
+	toRow: func(f *core.Feed) []string {
 		fetched := "-"
 		if f.FetchedAt != nil {
 			fetched = f.FetchedAt.Format("2006-01-02 15:04")
 		}
-		rows = append(rows, []string{
+		return []string{
 			fmt.Sprintf("%d", f.ID), f.Title, f.URL, fetched, feedStatus(f.Disabled, f.ErrorCount),
-		})
-	}
-	_, err := fmt.Fprintln(w, newStyledTable("ID", "TITLE", "URL", "FETCHED", "STATUS").Rows(rows...).Render())
-	return err
+		}
+	},
 }
 
-// --- Entries table ---
-
-func renderEntriesTable(w io.Writer, entries []*core.Entry) error {
-	if useStyled(w) {
-		return renderEntriesTableStyled(w, entries)
-	}
-	return renderEntriesTablePlain(w, entries)
-}
-
-func renderEntriesTablePlain(w io.Writer, entries []*core.Entry) error {
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "ID\tFEED\tTITLE\tLINK\tPUBLISHED"); err != nil {
-		return err
-	}
-	for _, e := range entries {
+var entryTableDef = tableDefinition[*core.Entry]{
+	headers: []string{"ID", "FEED", "TITLE", "LINK", "PUBLISHED"},
+	toRow: func(e *core.Entry) []string {
 		pub := "-"
 		if e.PublishedAt != nil {
 			pub = e.PublishedAt.Format("2006-01-02 15:04")
 		}
-		if _, err := fmt.Fprintf(tw, "%d\t%d\t%s\t%s\t%s\n", e.ID, e.FeedID, e.Title, e.Link, pub); err != nil {
-			return err
-		}
-	}
-	return tw.Flush()
-}
-
-func renderEntriesTableStyled(w io.Writer, entries []*core.Entry) error {
-	rows := make([][]string, 0, len(entries))
-	for _, e := range entries {
-		pub := "-"
-		if e.PublishedAt != nil {
-			pub = e.PublishedAt.Format("2006-01-02 15:04")
-		}
-		rows = append(rows, []string{
+		return []string{
 			fmt.Sprintf("%d", e.ID), fmt.Sprintf("%d", e.FeedID), e.Title, e.Link, pub,
-		})
-	}
-	_, err := fmt.Fprintln(w, newStyledTable("ID", "FEED", "TITLE", "LINK", "PUBLISHED").Rows(rows...).Render())
-	return err
-}
-
-// --- Entry links table ---
-
-func renderEntryLinksTable(w io.Writer, entries []*core.Entry) error {
-	if useStyled(w) {
-		return renderEntryLinksTableStyled(w, entries)
-	}
-	return renderEntryLinksTablePlain(w, entries)
-}
-
-func renderEntryLinksTablePlain(w io.Writer, entries []*core.Entry) error {
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "ID\tFEED\tTITLE\tLINK"); err != nil {
-		return err
-	}
-	for _, e := range entries {
-		if _, err := fmt.Fprintf(tw, "%d\t%d\t%s\t%s\n", e.ID, e.FeedID, e.Title, e.Link); err != nil {
-			return err
 		}
-	}
-	return tw.Flush()
+	},
 }
 
-func renderEntryLinksTableStyled(w io.Writer, entries []*core.Entry) error {
-	rows := make([][]string, 0, len(entries))
-	for _, e := range entries {
-		rows = append(rows, []string{fmt.Sprintf("%d", e.ID), fmt.Sprintf("%d", e.FeedID), e.Title, e.Link})
-	}
-	_, err := fmt.Fprintln(w, newStyledTable("ID", "FEED", "TITLE", "LINK").Rows(rows...).Render())
-	return err
+var entryLinkTableDef = tableDefinition[*core.Entry]{
+	headers: []string{"ID", "FEED", "TITLE", "LINK"},
+	toRow: func(e *core.Entry) []string {
+		return []string{fmt.Sprintf("%d", e.ID), fmt.Sprintf("%d", e.FeedID), e.Title, e.Link}
+	},
 }
 
-// --- Tags table ---
-
-func renderTagsTable(w io.Writer, tags []core.Tag) error {
-	if useStyled(w) {
-		return renderTagsTableStyled(w, tags)
-	}
-	return renderTagsTablePlain(w, tags)
+var tagTableDef = tableDefinition[core.Tag]{
+	headers: []string{"ID", "NAME"},
+	toRow: func(t core.Tag) []string {
+		return []string{fmt.Sprintf("%d", t.ID), t.Name}
+	},
 }
 
-func renderTagsTablePlain(w io.Writer, tags []core.Tag) error {
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "ID\tNAME"); err != nil {
-		return err
-	}
-	for _, t := range tags {
-		if _, err := fmt.Fprintf(tw, "%d\t%s\n", t.ID, t.Name); err != nil {
-			return err
-		}
-	}
-	return tw.Flush()
-}
-
-func renderTagsTableStyled(w io.Writer, tags []core.Tag) error {
-	rows := make([][]string, 0, len(tags))
-	for _, t := range tags {
-		rows = append(rows, []string{fmt.Sprintf("%d", t.ID), t.Name})
-	}
-	_, err := fmt.Fprintln(w, newStyledTable("ID", "NAME").Rows(rows...).Render())
-	return err
-}
-
-// --- Feed stats table ---
-
-func renderFeedStatsTable(w io.Writer, stats []core.FeedStats) error {
-	if useStyled(w) {
-		return renderFeedStatsTableStyled(w, stats)
-	}
-	return renderFeedStatsTablePlain(w, stats)
-}
-
-func renderFeedStatsTablePlain(w io.Writer, stats []core.FeedStats) error {
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "ID\tTITLE\tTOTAL\tUNREAD\tSTARRED\tFETCHED\tSTATUS"); err != nil {
-		return err
-	}
-	for _, s := range stats {
+var feedStatsTableDef = tableDefinition[core.FeedStats]{
+	headers: []string{"ID", "TITLE", "TOTAL", "UNREAD", "STARRED", "FETCHED", "STATUS"},
+	toRow: func(s core.FeedStats) []string {
 		fetched := "-"
 		if s.FetchedAt != nil {
 			fetched = s.FetchedAt.Format("2006-01-02 15:04")
 		}
-		status := feedStatus(s.Disabled, s.ErrorCount)
-		if _, err := fmt.Fprintf(tw, "%d\t%s\t%d\t%d\t%d\t%s\t%s\n",
-			s.FeedID, s.Title, s.TotalCount, s.UnreadCount, s.StarredCount, fetched, status); err != nil {
-			return err
-		}
-	}
-	return tw.Flush()
-}
-
-func renderFeedStatsTableStyled(w io.Writer, stats []core.FeedStats) error {
-	rows := make([][]string, 0, len(stats))
-	for _, s := range stats {
-		fetched := "-"
-		if s.FetchedAt != nil {
-			fetched = s.FetchedAt.Format("2006-01-02 15:04")
-		}
-		rows = append(rows, []string{
+		return []string{
 			fmt.Sprintf("%d", s.FeedID), s.Title,
 			fmt.Sprintf("%d", s.TotalCount), fmt.Sprintf("%d", s.UnreadCount), fmt.Sprintf("%d", s.StarredCount),
 			fetched, feedStatus(s.Disabled, s.ErrorCount),
-		})
-	}
-	_, err := fmt.Fprintln(w, newStyledTable("ID", "TITLE", "TOTAL", "UNREAD", "STARRED", "FETCHED", "STATUS").Rows(rows...).Render())
-	return err
+		}
+	},
+}
+
+// --- Public render functions ---
+
+func renderFeedsTable(w io.Writer, feeds []*core.Feed) error {
+	return renderTable(w, feeds, feedTableDef)
+}
+
+func renderEntriesTable(w io.Writer, entries []*core.Entry) error {
+	return renderTable(w, entries, entryTableDef)
+}
+
+func renderEntryLinksTable(w io.Writer, entries []*core.Entry) error {
+	return renderTable(w, entries, entryLinkTableDef)
+}
+
+func renderTagsTable(w io.Writer, tags []core.Tag) error {
+	return renderTable(w, tags, tagTableDef)
+}
+
+func renderFeedStatsTable(w io.Writer, stats []core.FeedStats) error {
+	return renderTable(w, stats, feedStatsTableDef)
 }
 
 // --- Shared table factory ---

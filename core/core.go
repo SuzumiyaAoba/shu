@@ -9,6 +9,7 @@ package core
 import (
 	"context"
 	"io"
+	"iter"
 	"log/slog"
 	"net/http"
 	"time"
@@ -68,6 +69,20 @@ type TagStore interface {
 	ListFeedTags(ctx context.Context) (map[int64][]Tag, error)
 	ListAllTags(ctx context.Context) ([]Tag, error)
 	ListFeedsByTag(ctx context.Context, tagName string) ([]*Feed, error)
+}
+
+// EntryIterator is an optional extension of [EntryStore] that supports
+// streaming entry retrieval via a range-over-func iterator. Implementations
+// avoid loading the entire result set into memory, which is beneficial for
+// large result sets and streaming output.
+//
+// Use a type assertion to detect support:
+//
+//	if it, ok := store.(EntryIterator); ok {
+//	    for entry, err := range it.IterEntries(ctx, filter) { ... }
+//	}
+type EntryIterator interface {
+	IterEntries(ctx context.Context, filter EntryFilter) iter.Seq2[*Entry, error]
 }
 
 // MaintenanceStore provides housekeeping operations.

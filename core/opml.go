@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"sort"
+	"maps"
+	"slices"
 	"time"
 )
 
@@ -97,23 +98,12 @@ func (h *OPMLHandler) ExportOPML(ctx context.Context) (*OPML, error) {
 	}
 
 	taggedFeeds := make(map[string][]*Feed)
-	tagNames := make([]string, 0)
-	seenTags := make(map[string]bool)
-
 	for _, f := range feeds {
-		tags := feedTags[f.ID]
-		if len(tags) == 0 {
-			continue
-		}
-		for _, tag := range tags {
+		for _, tag := range feedTags[f.ID] {
 			taggedFeeds[tag.Name] = append(taggedFeeds[tag.Name], f)
-			if !seenTags[tag.Name] {
-				tagNames = append(tagNames, tag.Name)
-				seenTags[tag.Name] = true
-			}
 		}
 	}
-	sort.Strings(tagNames)
+	tagNames := slices.Sorted(maps.Keys(taggedFeeds))
 
 	opml := &OPML{
 		Version: "2.0",
@@ -218,7 +208,7 @@ func (i *opmlImporter) importOutline(ctx context.Context, outline OPMLOutline, p
 		}
 		tags := parentTags
 		if tag != "" {
-			tags = append(append([]string{}, parentTags...), tag)
+			tags = append(slices.Clone(parentTags), tag)
 		}
 		added := 0
 		for _, child := range outline.Outlines {

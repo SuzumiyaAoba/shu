@@ -89,7 +89,7 @@ func (m *FeedManager) AddFeed(ctx context.Context, url string, titleOverride str
 		return nil, fmt.Errorf("store feed: %w", err)
 	}
 
-	m.logger.Info("feed added", "id", feed.ID, "title", feed.Title, "url", feed.URL)
+	m.logger.With("feed_id", feed.ID, "feed_url", feed.URL).Info("feed added", "title", feed.Title)
 	return feed, nil
 }
 
@@ -110,7 +110,7 @@ func (m *FeedManager) RemoveFeed(ctx context.Context, id int64) error {
 	if err := m.store.RemoveFeed(ctx, id); err != nil {
 		return fmt.Errorf("remove feed %d: %w", id, err)
 	}
-	m.logger.Info("feed removed", "id", id)
+	m.logger.With("feed_id", id).Info("feed removed")
 	return nil
 }
 
@@ -125,7 +125,7 @@ func (m *FeedManager) AddFeedDirect(ctx context.Context, feed *Feed) error {
 	if err := m.store.AddFeed(ctx, feed); err != nil {
 		return fmt.Errorf("store feed: %w", err)
 	}
-	m.logger.Info("feed added (direct)", "id", feed.ID, "url", feed.URL)
+	m.logger.With("feed_id", feed.ID, "feed_url", feed.URL).Info("feed added (direct)")
 	return nil
 }
 
