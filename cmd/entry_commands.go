@@ -19,8 +19,6 @@ type entryMutationSpec struct {
 	batchLabel  string
 }
 
-var browserOpener = openBrowser
-
 func entryCommands(getService entryServiceGetter) []*cobra.Command {
 	return withGroup("entries",
 		newEntriesCmd(getService),
@@ -28,7 +26,7 @@ func entryCommands(getService entryServiceGetter) []*cobra.Command {
 		newUnreadCmd(getService),
 		newStarCmd(getService),
 		newUnstarCmd(getService),
-		newOpenCmd(getService),
+		newOpenCmd(getService, openBrowser),
 		newSearchCmd(getService),
 		newDuplicatesCmd(getService),
 	)
@@ -209,13 +207,13 @@ func newUnstarCmd(getService entryServiceGetter) *cobra.Command {
 	}
 }
 
-func newOpenCmd(getService entryServiceGetter) *cobra.Command {
+func newOpenCmd(getService entryServiceGetter, openURL func(string) error) *cobra.Command {
 	return &cobra.Command{
 		Use:   "open <entry-id>",
 		Short: "Open an entry in the default browser",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, id, err := serviceAndID(cmd, args, getService)
+			svc, id, err := serviceAndID(args, getService)
 			if err != nil {
 				return err
 			}
@@ -237,7 +235,7 @@ func newOpenCmd(getService entryServiceGetter) *cobra.Command {
 			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Opening %s\n", entry.Link); err != nil {
 				return err
 			}
-			return browserOpener(entry.Link)
+			return openURL(entry.Link)
 		},
 	}
 }
@@ -301,7 +299,7 @@ func newDuplicatesCmd(getService entryServiceGetter) *cobra.Command {
 		Short: "Find entries from other feeds with the same link",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, id, err := serviceAndID(cmd, args, getService)
+			svc, id, err := serviceAndID(args, getService)
 			if err != nil {
 				return err
 			}

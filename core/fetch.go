@@ -35,64 +35,34 @@ func (s *Service) fetchFeedByID(ctx context.Context, feedID int64, notifier *fet
 }
 
 func (s *Service) fetchFeed(ctx context.Context, feed *Feed, notifier *fetchNotifier) ([]*Entry, error) {
-	emitFetchStarted(notifier, feed)
+	notifier.started(feed)
 
 	if feed.Disabled {
 		s.logger.Warn("feed disabled, skipping", "id", feed.ID, "title", feed.Title)
-		emitFetchSkipped(notifier, feed, FetchSkipDisabled)
+		notifier.skipped(feed, FetchSkipDisabled)
 		return nil, nil
 	}
 
 	document, skipped, err := s.downloadFeedDocument(ctx, feed)
 	if err != nil {
-		emitFetchCompleted(notifier, feed, 0, err)
+		notifier.completed(feed, 0, err)
 		return nil, err
 	}
 	if skipped {
 		s.logger.Info("feed not modified", "id", feed.ID, "title", feed.Title)
-		emitFetchSkipped(notifier, feed, FetchSkipNotModified)
+		notifier.skipped(feed, FetchSkipNotModified)
 		return nil, nil
 	}
 
 	result, err := s.persistFetchedFeed(ctx, feed, document)
 	if err != nil {
-		emitFetchCompleted(notifier, feed, 0, err)
+		notifier.completed(feed, 0, err)
 		return nil, err
 	}
 
 	newEntries, count := s.resolveFetchedEntries(ctx, feed, result)
-	emitFetchCompleted(notifier, feed, count, nil)
+	notifier.completed(feed, count, nil)
 	return newEntries, nil
-}
-
-func emitFetchStarted(notifier *fetchNotifier, feed *Feed) {
-	notifier.emit(FetchEvent{
-		Type:      FetchEventStarted,
-		FeedID:    feed.ID,
-		FeedTitle: feed.Title,
-		FeedURL:   feed.URL,
-	})
-}
-
-func emitFetchSkipped(notifier *fetchNotifier, feed *Feed, reason FetchSkipReason) {
-	notifier.emit(FetchEvent{
-		Type:       FetchEventSkipped,
-		FeedID:     feed.ID,
-		FeedTitle:  feed.Title,
-		FeedURL:    feed.URL,
-		SkipReason: reason,
-	})
-}
-
-func emitFetchCompleted(notifier *fetchNotifier, feed *Feed, newEntries int, err error) {
-	notifier.emit(FetchEvent{
-		Type:       FetchEventCompleted,
-		FeedID:     feed.ID,
-		FeedTitle:  feed.Title,
-		FeedURL:    feed.URL,
-		NewEntries: newEntries,
-		Err:        err,
-	})
 }
 
 // GetEntry retrieves a single entry by its primary key.

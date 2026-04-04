@@ -11,6 +11,8 @@ import (
 	sqlite "modernc.org/sqlite"
 )
 
+const sqliteConstraintUnique = 2067
+
 // AddFeed inserts a new feed row. On success the feed's ID is set to the
 // auto-generated primary key and AddedAt is set to the current UTC time.
 // Returns an error if a feed with the same URL already exists (UNIQUE

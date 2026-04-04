@@ -9,8 +9,6 @@ import (
 	"github.com/SuzumiyaAoba/shu/core"
 )
 
-const sqliteConstraintUnique = 2067
-
 // feedColumns is the SELECT column list shared by GetFeed and ListFeeds.
 const feedColumns = `id, url, title, site_url, added_at, fetched_at, description, language, image_url, feed_type, etag, last_modified, error_count, last_error, disabled, fetch_interval_sec`
 

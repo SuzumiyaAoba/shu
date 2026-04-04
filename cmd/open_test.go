@@ -17,14 +17,11 @@ func TestOpenCmd(t *testing.T) {
 	}
 
 	var openedURL string
-	restore := stubBrowserOpener(func(url string) error {
-		openedURL = url
-		return nil
-	})
-	defer restore()
-
 	stdout, stderr, err := executeSingleCommand(newOpenCmd(func() (entryService, error) {
 		return service, nil
+	}, func(url string) error {
+		openedURL = url
+		return nil
 	}), "1")
 	if err != nil {
 		t.Fatalf("open command failed: %v", err)
@@ -49,12 +46,9 @@ func TestOpenCmdWarnsWhenMarkReadFails(t *testing.T) {
 		markReadErr: errors.New("boom"),
 	}
 
-	restore := stubBrowserOpener(func(url string) error { return nil })
-	defer restore()
-
 	stdout, stderr, err := executeSingleCommand(newOpenCmd(func() (entryService, error) {
 		return service, nil
-	}), "1")
+	}, func(url string) error { return nil }), "1")
 	if err != nil {
 		t.Fatalf("open command failed: %v", err)
 	}
@@ -71,12 +65,9 @@ func TestOpenCmdFailsWhenBrowserOpenFails(t *testing.T) {
 		entry: &core.Entry{ID: 1, Link: "https://example.com/post-1"},
 	}
 
-	restore := stubBrowserOpener(func(url string) error { return errors.New("open failed") })
-	defer restore()
-
 	_, _, err := executeSingleCommand(newOpenCmd(func() (entryService, error) {
 		return service, nil
-	}), "1")
+	}, func(url string) error { return errors.New("open failed") }), "1")
 	if err == nil || !strings.Contains(err.Error(), "open failed") {
 		t.Fatalf("expected browser open error, got %v", err)
 	}
@@ -89,7 +80,7 @@ func TestOpenCmdFailsWithoutLink(t *testing.T) {
 
 	_, _, err := executeSingleCommand(newOpenCmd(func() (entryService, error) {
 		return service, nil
-	}), "1")
+	}, func(url string) error { return nil }), "1")
 	if err == nil || !strings.Contains(err.Error(), "entry #1 has no link") {
 		t.Fatalf("expected missing link error, got %v", err)
 	}
@@ -102,7 +93,7 @@ func TestOpenCmdWrapsGetEntryError(t *testing.T) {
 
 	_, _, err := executeSingleCommand(newOpenCmd(func() (entryService, error) {
 		return service, nil
-	}), "1")
+	}, func(url string) error { return nil }), "1")
 	if err == nil || !strings.Contains(err.Error(), "entry #1: boom") {
 		t.Fatalf("expected wrapped get entry error, got %v", err)
 	}
@@ -117,14 +108,6 @@ func executeSingleCommand(cmd *cobra.Command, args ...string) (string, string, e
 
 	err := cmd.Execute()
 	return stdout.String(), stderr.String(), err
-}
-
-func stubBrowserOpener(opener func(string) error) func() {
-	previous := browserOpener
-	browserOpener = opener
-	return func() {
-		browserOpener = previous
-	}
 }
 
 type openTestService struct {

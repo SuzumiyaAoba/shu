@@ -37,7 +37,7 @@ func newImportCmd(getService opmlServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if handled, err := output.write(cmd.OutOrStdout(), result); handled || err != nil {
+			if handled, err := output.encode(cmd.OutOrStdout(), result); handled || err != nil {
 				return err
 			}
 

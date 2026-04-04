@@ -70,3 +70,33 @@ func (n *fetchNotifier) emit(event FetchEvent) {
 	defer n.mu.Unlock()
 	n.observer.OnFetchEvent(event)
 }
+
+func (n *fetchNotifier) started(feed *Feed) {
+	n.emit(FetchEvent{
+		Type:      FetchEventStarted,
+		FeedID:    feed.ID,
+		FeedTitle: feed.Title,
+		FeedURL:   feed.URL,
+	})
+}
+
+func (n *fetchNotifier) skipped(feed *Feed, reason FetchSkipReason) {
+	n.emit(FetchEvent{
+		Type:       FetchEventSkipped,
+		FeedID:     feed.ID,
+		FeedTitle:  feed.Title,
+		FeedURL:    feed.URL,
+		SkipReason: reason,
+	})
+}
+
+func (n *fetchNotifier) completed(feed *Feed, newEntries int, err error) {
+	n.emit(FetchEvent{
+		Type:       FetchEventCompleted,
+		FeedID:     feed.ID,
+		FeedTitle:  feed.Title,
+		FeedURL:    feed.URL,
+		NewEntries: newEntries,
+		Err:        err,
+	})
+}

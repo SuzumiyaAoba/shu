@@ -45,7 +45,7 @@ func newAddCmd(getService feedServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if handled, err := output.write(cmd.OutOrStdout(), feed); handled || err != nil {
+			if handled, err := output.encode(cmd.OutOrStdout(), feed); handled || err != nil {
 				return err
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Added feed #%d: %s (%s)\n", feed.ID, feed.Title, feed.URL)
@@ -106,7 +106,7 @@ func newFetchCmd(getService feedServiceGetter) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if handled, err := output.write(cmd.OutOrStdout(), entries); handled || err != nil {
+				if handled, err := output.encode(cmd.OutOrStdout(), entries); handled || err != nil {
 					return err
 				}
 				_, err = fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries from feed #%d\n", len(entries), fetchFeedID)
@@ -117,7 +117,7 @@ func newFetchCmd(getService feedServiceGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if handled, err := output.write(cmd.OutOrStdout(), map[string]int{"count": count}); handled || err != nil {
+			if handled, err := output.encode(cmd.OutOrStdout(), map[string]int{"count": count}); handled || err != nil {
 				return err
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count)

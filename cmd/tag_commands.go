@@ -20,7 +20,7 @@ func newTagCmd(getService tagServiceGetter) *cobra.Command {
 		Short: "Add a tag to a feed",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, id, err := serviceAndID(cmd, args, getService)
+			svc, id, err := serviceAndID(args, getService)
 			if err != nil {
 				return err
 			}
@@ -39,7 +39,7 @@ func newUntagCmd(getService tagServiceGetter) *cobra.Command {
 		Short: "Remove a tag from a feed",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, id, err := serviceAndID(cmd, args, getService)
+			svc, id, err := serviceAndID(args, getService)
 			if err != nil {
 				return err
 			}

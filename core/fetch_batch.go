@@ -44,7 +44,7 @@ func filterFeedsForFetch(feeds []*Feed, notifier *fetchNotifier, now time.Time) 
 	toFetch := make([]*Feed, 0, len(feeds))
 	for _, feed := range feeds {
 		if shouldSkipFeedInterval(feed, now) {
-			emitFetchSkipped(notifier, feed, FetchSkipInterval)
+			notifier.skipped(feed, FetchSkipInterval)
 			continue
 		}
 		toFetch = append(toFetch, feed)
