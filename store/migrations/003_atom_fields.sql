@@ -1,5 +1,9 @@
+-- +goose Up
 ALTER TABLE entries ADD COLUMN authors TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE entries ADD COLUMN links TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE entries ADD COLUMN contributors TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE entries ADD COLUMN rights TEXT NOT NULL DEFAULT '';
 ALTER TABLE entries ADD COLUMN source TEXT NOT NULL DEFAULT '';
+
+-- +goose Down
+SELECT 1;

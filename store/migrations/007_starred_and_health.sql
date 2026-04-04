@@ -1,3 +1,4 @@
+-- +goose Up
 -- Bookmark/star support for entries.
 ALTER TABLE entries ADD COLUMN starred_at TEXT;
 
@@ -8,3 +9,6 @@ ALTER TABLE feeds ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0;
 
 -- Per-feed fetch interval override (seconds). 0 means use global default.
 ALTER TABLE feeds ADD COLUMN fetch_interval_sec INTEGER NOT NULL DEFAULT 0;
+
+-- +goose Down
+SELECT 1;
