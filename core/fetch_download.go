@@ -4,12 +4,40 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 )
+
+type feedDownloader interface {
+	download(ctx context.Context, feed *Feed) (*fetchedFeedDocument, bool, error)
+}
+
+type feedDownloadStore interface {
+	UpdateFeedFetchedAt(ctx context.Context, id int64) error
+	RecordFeedError(ctx context.Context, id int64, errMsg string) error
+}
+
+type httpFeedDownloader struct {
+	client *http.Client
+	store  feedDownloadStore
+	logger *slog.Logger
+}
 
 type fetchedFeedDocument struct {
 	body    []byte
 	headers http.Header
+}
+
+func newHTTPFeedDownloader(store feedDownloadStore, logger *slog.Logger, client *http.Client) *httpFeedDownloader {
+	return &httpFeedDownloader{
+		client: normalizeHTTPClient(client),
+		store:  store,
+		logger: normalizeLogger(logger),
+	}
+}
+
+func (d *httpFeedDownloader) setHTTPClient(client *http.Client) {
+	d.client = normalizeHTTPClient(client)
 }
 
 // fetchBody downloads the feed document at the given URL and returns the raw
@@ -54,13 +82,13 @@ func fetchBodyConditional(ctx context.Context, client *http.Client, url, etag, l
 	return body, resp.Header, nil
 }
 
-func (f *Fetcher) downloadFeedDocument(ctx context.Context, feed *Feed) (*fetchedFeedDocument, bool, error) {
-	body, headers, err := fetchBodyConditional(ctx, f.client, feed.URL, feed.ETag, feed.LastModified)
+func (d *httpFeedDownloader) download(ctx context.Context, feed *Feed) (*fetchedFeedDocument, bool, error) {
+	body, headers, err := fetchBodyConditional(ctx, d.client, feed.URL, feed.ETag, feed.LastModified)
 	if err != nil {
-		return nil, false, f.handleFeedDownloadError(ctx, feed, err)
+		return nil, false, d.handleFeedDownloadError(ctx, feed, err)
 	}
 	if body == nil {
-		if err := f.markFeedFetched(ctx, feed.ID); err != nil {
+		if err := markFeedFetched(ctx, d.store, feed.ID); err != nil {
 			return nil, false, err
 		}
 		return nil, true, nil
@@ -68,13 +96,13 @@ func (f *Fetcher) downloadFeedDocument(ctx context.Context, feed *Feed) (*fetche
 	return &fetchedFeedDocument{body: body, headers: headers}, false, nil
 }
 
-func (f *Fetcher) handleFeedDownloadError(ctx context.Context, feed *Feed, err error) error {
+func (d *httpFeedDownloader) handleFeedDownloadError(ctx context.Context, feed *Feed, err error) error {
 	fetchErr := fmt.Errorf("fetch feed %s: %w", feed.URL, err)
 	if ctx.Err() != nil {
 		return fetchErr
 	}
-	if recErr := f.store.RecordFeedError(ctx, feed.ID, err.Error()); recErr != nil {
-		f.logger.Warn("failed to record feed error", "id", feed.ID, "error", recErr)
+	if recErr := d.store.RecordFeedError(ctx, feed.ID, err.Error()); recErr != nil {
+		d.logger.Warn("failed to record feed error", "id", feed.ID, "error", recErr)
 	}
 	return fetchErr
 }

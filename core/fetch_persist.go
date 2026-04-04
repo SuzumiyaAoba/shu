@@ -3,49 +3,81 @@ package core
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 )
+
+type feedPersister interface {
+	persist(ctx context.Context, feed *Feed, document *fetchedFeedDocument) (*persistedFeedEntries, error)
+}
+
+type feedPersistStore interface {
+	AddEntries(ctx context.Context, entries []*Entry) (int, error)
+	UpdateFeedFetchedAt(ctx context.Context, id int64) error
+	ResetFeedError(ctx context.Context, id int64) error
+	UpdateFeedCacheHeaders(ctx context.Context, id int64, etag, lastModified string) error
+}
+
+type feedFetchedMarker interface {
+	UpdateFeedFetchedAt(ctx context.Context, id int64) error
+}
+
+type feedCacheHeaderStore interface {
+	UpdateFeedCacheHeaders(ctx context.Context, id int64, etag, lastModified string) error
+}
+
+type storeFeedPersister struct {
+	store  feedPersistStore
+	logger *slog.Logger
+}
 
 type persistedFeedEntries struct {
 	entries  []*Entry
 	inserted int
 }
 
-func (f *Fetcher) persistFetchedFeed(ctx context.Context, feed *Feed, document *fetchedFeedDocument) (*persistedFeedEntries, error) {
-	f.storeConditionalHeaders(ctx, feed.ID, document.headers)
+func newStoreFeedPersister(store feedPersistStore, logger *slog.Logger) *storeFeedPersister {
+	return &storeFeedPersister{
+		store:  store,
+		logger: normalizeLogger(logger),
+	}
+}
+
+func (p *storeFeedPersister) persist(ctx context.Context, feed *Feed, document *fetchedFeedDocument) (*persistedFeedEntries, error) {
+	storeConditionalHeaders(ctx, p.store, p.logger, feed.ID, document.headers)
 
 	entries, err := parseFetchedEntries(feed.ID, feed.URL, document.body)
 	if err != nil {
 		return nil, err
 	}
 
-	inserted, err := f.store.AddEntries(ctx, entries)
+	inserted, err := p.store.AddEntries(ctx, entries)
 	if err != nil {
 		return nil, fmt.Errorf("store entries: %w", err)
 	}
-	if err := f.markFeedFetched(ctx, feed.ID); err != nil {
+	if err := markFeedFetched(ctx, p.store, feed.ID); err != nil {
 		return nil, err
 	}
 
-	if err := f.store.ResetFeedError(ctx, feed.ID); err != nil {
-		f.logger.Warn("failed to reset feed error", "id", feed.ID, "error", err)
+	if err := p.store.ResetFeedError(ctx, feed.ID); err != nil {
+		p.logger.Warn("failed to reset feed error", "id", feed.ID, "error", err)
 	}
 
-	f.logger.Info("feed fetched", "id", feed.ID, "title", feed.Title, "new_entries", inserted)
+	p.logger.Info("feed fetched", "id", feed.ID, "title", feed.Title, "new_entries", inserted)
 	return &persistedFeedEntries{entries: entries, inserted: inserted}, nil
 }
 
-func (f *Fetcher) markFeedFetched(ctx context.Context, feedID int64) error {
-	if err := f.store.UpdateFeedFetchedAt(ctx, feedID); err != nil {
+func markFeedFetched(ctx context.Context, store feedFetchedMarker, feedID int64) error {
+	if err := store.UpdateFeedFetchedAt(ctx, feedID); err != nil {
 		return fmt.Errorf("update fetched_at: %w", err)
 	}
 	return nil
 }
 
-func (f *Fetcher) storeConditionalHeaders(ctx context.Context, feedID int64, headers http.Header) {
+func storeConditionalHeaders(ctx context.Context, store feedCacheHeaderStore, logger *slog.Logger, feedID int64, headers http.Header) {
 	if etag := headers.Get("ETag"); etag != "" || headers.Get("Last-Modified") != "" {
-		if err := f.store.UpdateFeedCacheHeaders(ctx, feedID, headers.Get("ETag"), headers.Get("Last-Modified")); err != nil {
-			f.logger.Warn("failed to update cache headers", "id", feedID, "error", err)
+		if err := store.UpdateFeedCacheHeaders(ctx, feedID, headers.Get("ETag"), headers.Get("Last-Modified")); err != nil {
+			logger.Warn("failed to update cache headers", "id", feedID, "error", err)
 		}
 	}
 }

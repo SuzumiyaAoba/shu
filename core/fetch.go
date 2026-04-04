@@ -15,22 +15,27 @@ type fetcherStore interface {
 
 // Fetcher owns feed download, parse, and persistence workflows.
 type Fetcher struct {
-	store  fetcherStore
-	logger *slog.Logger
-	client *http.Client
+	store      fetcherStore
+	logger     *slog.Logger
+	downloader feedDownloader
+	persister  feedPersister
 }
 
 // NewFetcher creates a fetch domain service.
 func NewFetcher(store fetcherStore, logger *slog.Logger, client *http.Client) *Fetcher {
+	logger = normalizeLogger(logger)
 	return &Fetcher{
-		store:  store,
-		logger: normalizeLogger(logger),
-		client: normalizeHTTPClient(client),
+		store:      store,
+		logger:     logger,
+		downloader: newHTTPFeedDownloader(store, logger, client),
+		persister:  newStoreFeedPersister(store, logger),
 	}
 }
 
 func (f *Fetcher) setHTTPClient(client *http.Client) {
-	f.client = normalizeHTTPClient(client)
+	if downloader, ok := f.downloader.(*httpFeedDownloader); ok {
+		downloader.setHTTPClient(client)
+	}
 }
 
 // FetchFeed downloads and parses the RSS/Atom feed identified by feedID, then
@@ -71,7 +76,7 @@ func (f *Fetcher) fetchFeed(ctx context.Context, feed *Feed, notifier *fetchNoti
 		return nil, nil
 	}
 
-	document, skipped, err := f.downloadFeedDocument(ctx, feed)
+	document, skipped, err := f.downloader.download(ctx, feed)
 	if err != nil {
 		notifier.completed(feed, 0, err)
 		return nil, err
@@ -82,7 +87,7 @@ func (f *Fetcher) fetchFeed(ctx context.Context, feed *Feed, notifier *fetchNoti
 		return nil, nil
 	}
 
-	result, err := f.persistFetchedFeed(ctx, feed, document)
+	result, err := f.persister.persist(ctx, feed, document)
 	if err != nil {
 		notifier.completed(feed, 0, err)
 		return nil, err
