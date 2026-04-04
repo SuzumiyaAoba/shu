@@ -29,7 +29,7 @@ func (s *SQLiteStore) AddFeed(ctx context.Context, feed *core.Feed) error {
 		if errors.As(err, &sqliteErr) && sqliteErr.Code() == sqliteConstraintUnique {
 			return fmt.Errorf("feed %s: %w", feed.URL, core.ErrFeedAlreadyExists)
 		}
-		return fmt.Errorf("insert feed: %w", err)
+		return &core.StoreError{Op: "add", Table: "feeds", Err: err}
 	}
 	id, err := result.LastInsertId()
 	if err != nil {
@@ -64,7 +64,7 @@ func (s *SQLiteStore) ListFeeds(ctx context.Context) ([]*core.Feed, error) {
 		`SELECT `+feedColumns+` FROM feeds ORDER BY id`,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("query feeds: %w", err)
+		return nil, &core.StoreError{Op: "list", Table: "feeds", Err: err}
 	}
 	return collectFeeds(rows)
 }
@@ -142,7 +142,7 @@ func (s *SQLiteStore) ListDeadFeeds(ctx context.Context) ([]*core.Feed, error) {
 		`SELECT `+feedColumns+` FROM feeds WHERE error_count > 0 ORDER BY id`,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("query dead feeds: %w", err)
+		return nil, &core.StoreError{Op: "list_dead", Table: "feeds", Err: err}
 	}
 	return collectFeeds(rows)
 }

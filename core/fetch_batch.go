@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -62,8 +63,12 @@ func shouldSkipFeedInterval(feed *Feed, now time.Time) bool {
 func (f *Fetcher) fetchFeedsConcurrently(ctx context.Context, feeds []*Feed, notifier *fetchNotifier) (int, error) {
 	jobs := make(chan *Feed)
 	workers := min(fetchWorkerCount, len(feeds))
-	var total atomic.Int64
-	var wg sync.WaitGroup
+	var (
+		total      atomic.Int64
+		wg         sync.WaitGroup
+		errMu      sync.Mutex
+		fetchErrs  []error
+	)
 
 	worker := func() {
 		defer wg.Done()
@@ -82,7 +87,10 @@ func (f *Fetcher) fetchFeedsConcurrently(ctx context.Context, feeds []*Feed, not
 					if ctx.Err() != nil {
 						return
 					}
-					f.logger.Error("failed to fetch feed", "id", feed.ID, "url", feed.URL, "error", err)
+					f.logger.With("feed_id", feed.ID, "feed_url", feed.URL).Error("failed to fetch feed", "error", err)
+					errMu.Lock()
+					fetchErrs = append(fetchErrs, err)
+					errMu.Unlock()
 					continue
 				}
 				total.Add(int64(len(entries)))
@@ -112,7 +120,7 @@ func (f *Fetcher) fetchFeedsConcurrently(ctx context.Context, feeds []*Feed, not
 		return int(total.Load()), err
 	}
 
-	return int(total.Load()), nil
+	return int(total.Load()), errors.Join(fetchErrs...)
 }
 
 func (s *Service) FetchAll(ctx context.Context) (int, error) {

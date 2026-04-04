@@ -45,8 +45,10 @@ func newStoreFeedPersister(store feedPersistStore, logger *slog.Logger) *storeFe
 }
 
 func (p *storeFeedPersister) persist(ctx context.Context, feed *Feed, document *fetchedFeedDocument) (*persistedFeedEntries, error) {
+	logger := p.logger.With("feed_id", feed.ID, "feed_title", feed.Title)
+
 	// Cache headers are best-effort and do not need to be part of the transaction.
-	storeConditionalHeaders(ctx, p.store, p.logger, feed.ID, document.headers)
+	storeConditionalHeaders(ctx, p.store, logger, feed.ID, document.headers)
 
 	entries, err := parseFetchedEntries(feed.ID, feed.URL, document.body)
 	if err != nil {
@@ -64,14 +66,14 @@ func (p *storeFeedPersister) persist(ctx context.Context, feed *Feed, document *
 			return err
 		}
 		if err := p.store.ResetFeedError(ctx, feed.ID); err != nil {
-			p.logger.Warn("failed to reset feed error", "id", feed.ID, "error", err)
+			logger.Warn("failed to reset feed error", "error", err)
 		}
 		return nil
 	}); err != nil {
 		return nil, err
 	}
 
-	p.logger.Info("feed fetched", "id", feed.ID, "title", feed.Title, "new_entries", inserted)
+	logger.Info("feed fetched", "new_entries", inserted)
 	return &persistedFeedEntries{entries: entries, inserted: inserted}, nil
 }
 
@@ -85,7 +87,7 @@ func markFeedFetched(ctx context.Context, store feedFetchedMarker, feedID int64)
 func storeConditionalHeaders(ctx context.Context, store feedCacheHeaderStore, logger *slog.Logger, feedID int64, headers http.Header) {
 	if etag := headers.Get("ETag"); etag != "" || headers.Get("Last-Modified") != "" {
 		if err := store.UpdateFeedCacheHeaders(ctx, feedID, headers.Get("ETag"), headers.Get("Last-Modified")); err != nil {
-			logger.Warn("failed to update cache headers", "id", feedID, "error", err)
+			logger.Warn("failed to update cache headers", "error", err)
 		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"iter"
 	"strings"
 
 	"github.com/SuzumiyaAoba/shu/core"
@@ -58,9 +59,32 @@ func (s *SQLiteStore) ListEntries(ctx context.Context, filter core.EntryFilter) 
 
 	rows, err := s.executor(ctx).QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query entries: %w", err)
+		return nil, &core.StoreError{Op: "list", Table: "entries", Err: err}
 	}
 	return collectEntries(rows)
+}
+
+// IterEntries returns a range-over-func iterator that streams entries matching
+// the given filter one row at a time, without loading the full result set into
+// memory. It implements [core.EntryIterator].
+//
+// Iteration stops early when the caller returns false from the yield function.
+// Any query or scan error is delivered as the error value in the final yield
+// call.
+func (s *SQLiteStore) IterEntries(ctx context.Context, filter core.EntryFilter) iter.Seq2[*core.Entry, error] {
+	return func(yield func(*core.Entry, error) bool) {
+		query, args := newEntryFilterQuery(filter).buildSelectEntries(filter)
+		rows, err := s.executor(ctx).QueryContext(ctx, query, args...)
+		if err != nil {
+			yield(nil, &core.StoreError{Op: "iter", Table: "entries", Err: err})
+			return
+		}
+		for entry, err := range iterRows(rows, scanEntry) {
+			if !yield(entry, err) {
+				return
+			}
+		}
+	}
 }
 
 // CountEntries returns the total number of entries matching the filter.
@@ -144,7 +168,7 @@ func (s *SQLiteStore) SearchEntriesPage(ctx context.Context, query string, limit
 		query, limit, offset,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("search entries: %w", err)
+		return nil, &core.StoreError{Op: "search", Table: "entries", Err: err}
 	}
 	return collectEntries(rows)
 }
@@ -177,7 +201,7 @@ func (s *SQLiteStore) FindDuplicateEntries(ctx context.Context, entryID int64) (
 func addEntriesEx(ctx context.Context, ex sqlExecutor, entries []*core.Entry) (int, error) {
 	stmt, err := ex.PrepareContext(ctx, insertEntrySQL)
 	if err != nil {
-		return 0, fmt.Errorf("prepare statement: %w", err)
+		return 0, &core.StoreError{Op: "add", Table: "entries", Err: err}
 	}
 	defer func() { _ = stmt.Close() }()
 
