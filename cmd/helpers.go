@@ -165,6 +165,15 @@ func writeStructuredOutput(w io.Writer, v any, outputJSON, outputYAML bool) (boo
 	return false, nil
 }
 
+func writeStderrf(w io.Writer, format string, args ...any) error {
+	_, err := fmt.Fprintf(w, format+"\n", args...)
+	return err
+}
+
+func writeWarning(w io.Writer, format string, args ...any) error {
+	return writeStderrf(w, "warning: "+format, args...)
+}
+
 func writeStructuredValue(w io.Writer, fullValue, simpleValue any, includeFull, outputJSON, outputYAML bool) error {
 	value := simpleValue
 	if includeFull {

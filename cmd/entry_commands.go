@@ -229,7 +229,7 @@ func newOpenCmd(getService entryServiceGetter) *cobra.Command {
 			}
 
 			if err := svc.MarkEntryRead(cmd.Context(), id); err != nil {
-				if _, writeErr := fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not mark entry as read: %v\n", err); writeErr != nil {
+				if writeErr := writeWarning(cmd.ErrOrStderr(), "could not mark entry as read: %v", err); writeErr != nil {
 					return writeErr
 				}
 			}

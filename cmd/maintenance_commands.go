@@ -87,7 +87,7 @@ func newRunCmd(getService maintenanceServiceGetter) *cobra.Command {
 
 			count, err := svc.FetchAll(ctx)
 			if err != nil {
-				if _, writeErr := fmt.Fprintf(cmd.ErrOrStderr(), "fetch error: %v\n", err); writeErr != nil {
+				if writeErr := writeStderrf(cmd.ErrOrStderr(), "fetch error: %v", err); writeErr != nil {
 					return writeErr
 				}
 			} else {
@@ -107,7 +107,7 @@ func newRunCmd(getService maintenanceServiceGetter) *cobra.Command {
 				case <-ticker.C:
 					count, err := svc.FetchAll(ctx)
 					if err != nil {
-						if _, writeErr := fmt.Fprintf(cmd.ErrOrStderr(), "fetch error: %v\n", err); writeErr != nil {
+						if writeErr := writeStderrf(cmd.ErrOrStderr(), "fetch error: %v", err); writeErr != nil {
 							return writeErr
 						}
 						continue

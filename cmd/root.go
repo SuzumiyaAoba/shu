@@ -28,23 +28,8 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 	var logLevel string
 	var sqliteBusyTimeout time.Duration
 	var sqliteMaxOpenConns int
-	var instance *app.Instance
-
-	getService := func() (*core.Service, error) {
-		if injected != nil {
-			return injected, nil
-		}
-		if instance != nil && instance.Service != nil {
-			return instance.Service, nil
-		}
-		return nil, errors.New("service not initialized")
-	}
-
-	getFeedService := asFeedServiceGetter(getService)
-	getEntryService := asEntryServiceGetter(getService)
-	getTagService := asTagServiceGetter(getService)
-	getMaintenanceService := asMaintenanceServiceGetter(getService)
-	getOPMLService := asOPMLServiceGetter(getService)
+	runtime := &rootRuntime{}
+	getService := newCoreServiceGetter(injected, runtime)
 
 	rootCmd := &cobra.Command{
 		Use:   "shu",
@@ -55,23 +40,18 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 				return nil
 			}
 
-			var err error
-			instance, err = app.Open(app.Config{
+			return runtime.open(app.Config{
 				DBPath:        dbPath,
 				LogLevel:      logLevel,
 				LogOutput:     os.Stderr,
 				SQLiteOptions: sqliteOptionsFromFlags(sqliteBusyTimeout, sqliteMaxOpenConns),
 			})
-			return err
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
-			if injected != nil || instance == nil {
+			if injected != nil {
 				return nil
 			}
-
-			err := instance.Close()
-			instance = nil
-			return err
+			return runtime.close()
 		},
 	}
 
@@ -88,13 +68,63 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 	rootCmd.PersistentFlags().DurationVar(&sqliteBusyTimeout, "sqlite-busy-timeout", 0, "SQLite busy timeout (e.g. 5s)")
 	rootCmd.PersistentFlags().IntVar(&sqliteMaxOpenConns, "sqlite-max-open-conns", 0, "SQLite max open connections")
 
-	rootCmd.AddCommand(feedCommands(getFeedService)...)
-	rootCmd.AddCommand(entryCommands(getEntryService)...)
-	rootCmd.AddCommand(tagCommands(getTagService)...)
-	rootCmd.AddCommand(maintenanceCommands(getMaintenanceService)...)
-	rootCmd.AddCommand(opmlCommands(getOPMLService)...)
+	rootCmd.AddCommand(feedCommands(adaptServiceGetter[feedService](getService))...)
+	rootCmd.AddCommand(entryCommands(adaptServiceGetter[entryService](getService))...)
+	rootCmd.AddCommand(tagCommands(adaptServiceGetter[tagService](getService))...)
+	rootCmd.AddCommand(maintenanceCommands(adaptServiceGetter[maintenanceService](getService))...)
+	rootCmd.AddCommand(opmlCommands(adaptServiceGetter[opmlService](getService))...)
 
 	return rootCmd
+}
+
+type rootRuntime struct {
+	instance *app.Instance
+}
+
+func (r *rootRuntime) open(cfg app.Config) error {
+	instance, err := app.Open(cfg)
+	if err != nil {
+		return err
+	}
+	r.instance = instance
+	return nil
+}
+
+func (r *rootRuntime) close() error {
+	if r.instance == nil {
+		return nil
+	}
+	err := r.instance.Close()
+	r.instance = nil
+	return err
+}
+
+func newCoreServiceGetter(injected *core.Service, runtime *rootRuntime) coreServiceGetter {
+	return func() (*core.Service, error) {
+		if injected != nil {
+			return injected, nil
+		}
+		if runtime != nil && runtime.instance != nil && runtime.instance.Service != nil {
+			return runtime.instance.Service, nil
+		}
+		return nil, errors.New("service not initialized")
+	}
+}
+
+func adaptServiceGetter[T any](get coreServiceGetter) func() (T, error) {
+	return func() (T, error) {
+		var zero T
+
+		svc, err := get()
+		if err != nil {
+			return zero, err
+		}
+		typed, ok := any(svc).(T)
+		if !ok {
+			return zero, errors.New("service type mismatch")
+		}
+		return typed, nil
+	}
 }
 
 func withGroup(groupID string, commands ...*cobra.Command) []*cobra.Command {
@@ -104,42 +134,9 @@ func withGroup(groupID string, commands ...*cobra.Command) []*cobra.Command {
 	return commands
 }
 
-// Execute runs the root command and exits with code 1 on error.
-// This is the single entry point called from main().
-func Execute() {
-	if err := newRootCmd(nil).Execute(); err != nil {
-		os.Exit(1)
-	}
-}
-
-func asFeedServiceGetter(get coreServiceGetter) feedServiceGetter {
-	return func() (feedService, error) {
-		return get()
-	}
-}
-
-func asEntryServiceGetter(get coreServiceGetter) entryServiceGetter {
-	return func() (entryService, error) {
-		return get()
-	}
-}
-
-func asTagServiceGetter(get coreServiceGetter) tagServiceGetter {
-	return func() (tagService, error) {
-		return get()
-	}
-}
-
-func asMaintenanceServiceGetter(get coreServiceGetter) maintenanceServiceGetter {
-	return func() (maintenanceService, error) {
-		return get()
-	}
-}
-
-func asOPMLServiceGetter(get coreServiceGetter) opmlServiceGetter {
-	return func() (opmlService, error) {
-		return get()
-	}
+// Execute runs the root command and returns any execution error.
+func Execute() error {
+	return newRootCmd(nil).Execute()
 }
 
 func sqliteOptionsFromFlags(busyTimeout time.Duration, maxOpenConns int) *store.SQLiteOptions {

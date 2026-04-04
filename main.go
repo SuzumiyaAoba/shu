@@ -6,8 +6,14 @@
 // the core logic can be reused in non-CLI contexts such as AWS Lambda.
 package main
 
-import "github.com/SuzumiyaAoba/shu/cmd"
+import (
+	"os"
+
+	"github.com/SuzumiyaAoba/shu/cmd"
+)
 
 func main() {
-	cmd.Execute()
+	if err := cmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }

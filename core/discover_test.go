@@ -2,9 +2,6 @@ package core_test
 
 import (
 	"context"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/SuzumiyaAoba/shu/core"
@@ -22,11 +19,7 @@ func TestDiscoverFeeds(t *testing.T) {
 <body>Hello</body>
 </html>`
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		_, _ = io.WriteString(w, htmlPage)
-	}))
-	defer ts.Close()
+	ts := newHTMLTestServer(t, htmlPage)
 
 	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
@@ -52,10 +45,7 @@ func TestDiscoverFeeds(t *testing.T) {
 func TestDiscoverFeedsNone(t *testing.T) {
 	htmlPage := `<!DOCTYPE html><html><head><title>No feeds</title></head><body>Hello</body></html>`
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, htmlPage)
-	}))
-	defer ts.Close()
+	ts := newHTMLTestServer(t, htmlPage)
 
 	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
 
