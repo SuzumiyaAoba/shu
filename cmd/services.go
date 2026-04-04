@@ -56,6 +56,7 @@ type opmlService interface {
 	ImportOPML(ctx context.Context, r io.Reader) (int, error)
 	ImportOPMLDetailed(ctx context.Context, r io.Reader) (*core.OPMLImportResult, error)
 	ExportOPML(ctx context.Context) (*core.OPML, error)
+	FetchAll(ctx context.Context) (int, error)
 }
 
 type feedServiceGetter func() (feedService, error)

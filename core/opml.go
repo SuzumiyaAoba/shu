@@ -56,6 +56,7 @@ type OPMLOutline struct {
 
 type opmlFeedAdder interface {
 	AddFeed(ctx context.Context, url string, titleOverride string) (*Feed, error)
+	AddFeedDirect(ctx context.Context, feed *Feed) error
 }
 
 type opmlTagAdder interface {
@@ -254,7 +255,8 @@ func (i *opmlImporter) importOutline(ctx context.Context, outline OPMLOutline, p
 }
 
 func (i *opmlImporter) ensureFeed(ctx context.Context, url, title string) (*Feed, int, error) {
-	feed, err := i.handler.feeds.AddFeed(ctx, url, title)
+	feed := &Feed{URL: url, Title: title}
+	err := i.handler.feeds.AddFeedDirect(ctx, feed)
 	if err == nil {
 		if i.result != nil {
 			i.result.AddedCount++

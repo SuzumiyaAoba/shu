@@ -17,11 +17,16 @@ func opmlCommands(getService opmlServiceGetter) []*cobra.Command {
 
 func newImportCmd(getService opmlServiceGetter) *cobra.Command {
 	var output structuredOutputOptions
+	var fetchAfterImport bool
 
 	importCmd := &cobra.Command{
 		Use:   "import <file.opml>",
 		Short: "Import feeds from an OPML file",
-		Args:  cobra.ExactArgs(1),
+		Long: `Import feeds from an OPML file without fetching feed content.
+
+Feeds are registered immediately without any HTTP requests.
+Run 'shu fetch' afterwards to download entries for the imported feeds.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			svc, err := getService()
 			if err != nil {
@@ -59,12 +64,24 @@ func newImportCmd(getService opmlServiceGetter) *cobra.Command {
 					return err
 				}
 			}
-			_, err = fmt.Fprintln(cmd.OutOrStdout())
-			return err
+			if _, err := fmt.Fprintln(cmd.OutOrStdout()); err != nil {
+				return err
+			}
+
+			if fetchAfterImport && result.AddedCount > 0 {
+				count, err := svc.FetchAll(cmd.Context())
+				if err != nil {
+					return fmt.Errorf("fetch: %w", err)
+				}
+				_, err = fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d new entries\n", count)
+				return err
+			}
+			return nil
 		},
 	}
 
 	addStructuredOutputFlags(importCmd, &output.JSON, &output.YAML)
+	importCmd.Flags().BoolVar(&fetchAfterImport, "fetch", false, "fetch entries for newly imported feeds immediately")
 	return importCmd
 }
 

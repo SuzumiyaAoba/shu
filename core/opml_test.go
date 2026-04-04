@@ -12,6 +12,13 @@ import (
 	"github.com/SuzumiyaAoba/shu/core"
 )
 
+// newTestServiceNoHTTP creates a service that is not expected to make any HTTP
+// requests during OPML import tests.
+func newTestServiceNoHTTP(t *testing.T) *core.Service {
+	t.Helper()
+	return newTestService(t, nil)
+}
+
 func TestExportOPML(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
@@ -83,23 +90,16 @@ func TestExportOPMLWithTags(t *testing.T) {
 }
 
 func TestImportOPML(t *testing.T) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/rss+xml")
-		_, _ = io.WriteString(w, testRSSFeed)
-	})
-	ts := httptest.NewServer(handler)
-	defer ts.Close()
-
-	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
+	svc := newTestServiceNoHTTP(t)
 	ctx := context.Background()
 
 	opmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0">
   <head><title>Test</title></head>
   <body>
-    <outline text="Feed 1" type="rss" xmlUrl="` + ts.URL + `/feed1.xml"/>
+    <outline text="Feed 1" type="rss" xmlUrl="https://example.com/feed1.xml"/>
     <outline text="Tech" title="Tech">
-      <outline text="Feed 2" type="rss" xmlUrl="` + ts.URL + `/feed2.xml"/>
+      <outline text="Feed 2" type="rss" xmlUrl="https://example.com/feed2.xml"/>
     </outline>
   </body>
 </opml>`
@@ -120,14 +120,7 @@ func TestImportOPML(t *testing.T) {
 }
 
 func TestImportOPMLNestedCategoriesAddAllTags(t *testing.T) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/rss+xml")
-		_, _ = io.WriteString(w, testRSSFeed)
-	})
-	ts := httptest.NewServer(handler)
-	defer ts.Close()
-
-	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
+	svc := newTestServiceNoHTTP(t)
 	ctx := context.Background()
 
 	opmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
@@ -135,7 +128,7 @@ func TestImportOPMLNestedCategoriesAddAllTags(t *testing.T) {
   <body>
     <outline text="Tech">
       <outline text="Go">
-        <outline text="Feed 1" type="rss" xmlUrl="` + ts.URL + `/feed1.xml"/>
+        <outline text="Feed 1" type="rss" xmlUrl="https://example.com/feed1.xml"/>
       </outline>
     </outline>
   </body>
@@ -166,23 +159,16 @@ func TestImportOPMLNestedCategoriesAddAllTags(t *testing.T) {
 }
 
 func TestImportOPMLDuplicateSkip(t *testing.T) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/rss+xml")
-		_, _ = io.WriteString(w, testRSSFeed)
-	})
-	ts := httptest.NewServer(handler)
-	defer ts.Close()
-
-	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
+	svc := newTestServiceNoHTTP(t)
 	ctx := context.Background()
 
-	// Add the feed first.
-	_, _ = svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
+	// Add the feed first via AddFeedDirect.
+	_ = svc.AddFeedDirect(ctx, &core.Feed{URL: "https://example.com/feed.xml", Title: "Existing"})
 
 	opmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0">
   <body>
-    <outline text="Same Feed" type="rss" xmlUrl="` + ts.URL + `/feed.xml"/>
+    <outline text="Same Feed" type="rss" xmlUrl="https://example.com/feed.xml"/>
   </body>
 </opml>`
 
@@ -196,26 +182,19 @@ func TestImportOPMLDuplicateSkip(t *testing.T) {
 }
 
 func TestImportOPMLDuplicateAddsTag(t *testing.T) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/rss+xml")
-		_, _ = io.WriteString(w, testRSSFeed)
-	})
-	ts := httptest.NewServer(handler)
-	defer ts.Close()
-
-	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
+	svc := newTestServiceNoHTTP(t)
 	ctx := context.Background()
 
-	feed, err := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
-	if err != nil {
-		t.Fatalf("AddFeed failed: %v", err)
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Existing"}
+	if err := svc.AddFeedDirect(ctx, feed); err != nil {
+		t.Fatalf("AddFeedDirect failed: %v", err)
 	}
 
 	opmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0">
   <body>
     <outline text="Tech">
-      <outline text="Same Feed" type="rss" xmlUrl="` + ts.URL + `/feed.xml"/>
+      <outline text="Same Feed" type="rss" xmlUrl="https://example.com/feed.xml"/>
     </outline>
   </body>
 </opml>`
@@ -237,49 +216,40 @@ func TestImportOPMLDuplicateAddsTag(t *testing.T) {
 	}
 }
 
-func TestImportOPMLReturnsAddFeedError(t *testing.T) {
-	svc := newTestService(t, nil)
+func TestImportOPMLEmptyURLSkipped(t *testing.T) {
+	svc := newTestServiceNoHTTP(t)
 	ctx := context.Background()
 
 	opmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0">
   <body>
-    <outline text="Broken Feed" type="rss" xmlUrl="https://[invalid-url"/>
+    <outline text="No URL outline"/>
+    <outline text="Feed 1" type="rss" xmlUrl="https://example.com/feed1.xml"/>
   </body>
 </opml>`
 
 	added, err := svc.ImportOPML(ctx, strings.NewReader(opmlDoc))
-	if err == nil {
-		t.Fatal("expected ImportOPML to return add error")
+	if err != nil {
+		t.Fatalf("ImportOPML failed: %v", err)
 	}
-	if added != 0 {
-		t.Fatalf("added = %d, want 0", added)
-	}
-	if errors.Is(err, core.ErrFeedAlreadyExists) {
-		t.Fatalf("expected non-duplicate error, got %v", err)
+	if added != 1 {
+		t.Errorf("added = %d, want 1 (no-URL outline skipped)", added)
 	}
 }
 
 func TestImportOPMLDetailed(t *testing.T) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/rss+xml")
-		_, _ = io.WriteString(w, testRSSFeed)
-	})
-	ts := httptest.NewServer(handler)
-	defer ts.Close()
-
-	svc := newTestServiceWithOptions(t, nil, core.WithHTTPClient(ts.Client()))
+	svc := newTestServiceNoHTTP(t)
 	ctx := context.Background()
 
-	_, _ = svc.AddFeed(ctx, ts.URL+"/feed1.xml", "")
+	// Pre-register a feed so it shows as reused.
+	_ = svc.AddFeedDirect(ctx, &core.Feed{URL: "https://example.com/feed1.xml", Title: "Existing"})
 
 	opmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0">
   <body>
     <outline text="Tech">
-      <outline text="Existing Feed" type="rss" xmlUrl="` + ts.URL + `/feed1.xml"/>
-      <outline text="New Feed" type="rss" xmlUrl="` + ts.URL + `/feed2.xml"/>
-      <outline text="Broken Feed" type="rss" xmlUrl="https://[invalid-url"/>
+      <outline text="Existing Feed" type="rss" xmlUrl="https://example.com/feed1.xml"/>
+      <outline text="New Feed" type="rss" xmlUrl="https://example.com/feed2.xml"/>
     </outline>
   </body>
 </opml>`
@@ -297,13 +267,13 @@ func TestImportOPMLDetailed(t *testing.T) {
 	if result.TaggedCount != 2 {
 		t.Fatalf("TaggedCount = %d, want 2", result.TaggedCount)
 	}
-	if len(result.Issues) != 1 {
-		t.Fatalf("Issues = %+v, want 1 issue", result.Issues)
+	if len(result.Issues) != 0 {
+		t.Fatalf("Issues = %+v, want none", result.Issues)
 	}
 }
 
 func TestImportOPMLInvalidDocument(t *testing.T) {
-	svc := newTestService(t, nil)
+	svc := newTestServiceNoHTTP(t)
 	ctx := context.Background()
 
 	_, err := svc.ImportOPML(ctx, strings.NewReader("<opml"))
@@ -312,5 +282,35 @@ func TestImportOPMLInvalidDocument(t *testing.T) {
 	}
 	if !errors.Is(err, core.ErrInvalidOPML) {
 		t.Fatalf("expected ErrInvalidOPML, got %v", err)
+	}
+}
+
+func TestImportOPMLTitleFallback(t *testing.T) {
+	svc := newTestServiceNoHTTP(t)
+	ctx := context.Background()
+
+	// title attr takes precedence over text attr; text is used as fallback.
+	opmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="text-only" type="rss" xmlUrl="https://example.com/feed1.xml"/>
+    <outline text="text-val" title="title-val" type="rss" xmlUrl="https://example.com/feed2.xml"/>
+  </body>
+</opml>`
+
+	_, err := svc.ImportOPML(ctx, strings.NewReader(opmlDoc))
+	if err != nil {
+		t.Fatalf("ImportOPML failed: %v", err)
+	}
+
+	feeds, _ := svc.ListFeeds(ctx)
+	if len(feeds) != 2 {
+		t.Fatalf("got %d feeds, want 2", len(feeds))
+	}
+	if feeds[0].Title != "text-only" {
+		t.Errorf("feed[0].Title = %q, want %q", feeds[0].Title, "text-only")
+	}
+	if feeds[1].Title != "title-val" {
+		t.Errorf("feed[1].Title = %q, want %q", feeds[1].Title, "title-val")
 	}
 }
