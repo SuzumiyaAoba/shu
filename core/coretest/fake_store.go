@@ -36,6 +36,8 @@ func (BaseFakeStore) ResetFeedError(context.Context, int64) error { return nil }
 
 func (BaseFakeStore) SetFeedDisabled(context.Context, int64, bool) error { return nil }
 
+func (BaseFakeStore) ListDeadFeeds(context.Context) ([]*core.Feed, error) { return nil, nil }
+
 func (BaseFakeStore) AddEntries(context.Context, []*core.Entry) (int, error) { return 0, nil }
 
 func (BaseFakeStore) GetEntry(context.Context, int64) (*core.Entry, error) { return nil, nil }

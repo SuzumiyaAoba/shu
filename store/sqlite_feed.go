@@ -135,6 +135,18 @@ func (s *SQLiteStore) UpdateFeedCacheHeaders(ctx context.Context, id int64, etag
 	return nil
 }
 
+// ListDeadFeeds returns feeds that have at least one recorded fetch error.
+// Filtering is done in SQL to avoid loading all feeds into memory.
+func (s *SQLiteStore) ListDeadFeeds(ctx context.Context) ([]*core.Feed, error) {
+	rows, err := s.executor(ctx).QueryContext(ctx,
+		`SELECT `+feedColumns+` FROM feeds WHERE error_count > 0 ORDER BY id`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query dead feeds: %w", err)
+	}
+	return collectFeeds(rows)
+}
+
 // maxErrorCount is the number of consecutive failures before a feed is
 // automatically disabled.
 const maxErrorCount = 5
