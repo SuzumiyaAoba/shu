@@ -5,18 +5,7 @@ import "context"
 // ListDeadFeeds returns feeds with recorded fetch failures.
 // Manually disabled feeds without recorded errors are excluded.
 func (m *MaintenanceOps) ListDeadFeeds(ctx context.Context) ([]*Feed, error) {
-	feeds, err := m.feedStore.ListFeeds(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	dead := make([]*Feed, 0)
-	for _, feed := range feeds {
-		if feed.ErrorCount > 0 {
-			dead = append(dead, feed)
-		}
-	}
-	return dead, nil
+	return m.feedStore.ListDeadFeeds(ctx)
 }
 
 // RemoveDeadFeeds deletes feeds with recorded fetch failures and returns the

@@ -9,6 +9,7 @@ import (
 
 type maintenanceFeedStore interface {
 	FeedStore
+	FeedHealthStore
 	TxRunner
 }
 

@@ -31,6 +31,7 @@ type FeedHealthStore interface {
 	RecordFeedError(ctx context.Context, id int64, errMsg string) error
 	ResetFeedError(ctx context.Context, id int64) error
 	SetFeedDisabled(ctx context.Context, id int64, disabled bool) error
+	ListDeadFeeds(ctx context.Context) ([]*Feed, error)
 }
 
 // EntryStore handles entry persistence and queries.
