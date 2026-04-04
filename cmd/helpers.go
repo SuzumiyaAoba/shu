@@ -83,13 +83,10 @@ func (f paginationFlags) resolveOffset() (int, error) {
 }
 
 func writeEntryPageStructuredOutput(w io.Writer, page *core.EntryPage, pageInfo, outputJSON, outputYAML bool) (bool, error) {
-	if outputJSON {
-		return true, writeStructuredValue(w, page, page.Entries, pageInfo, outputJSON, outputYAML)
+	if !outputJSON && !outputYAML {
+		return false, nil
 	}
-	if outputYAML {
-		return true, writeStructuredValue(w, page, page.Entries, pageInfo, outputJSON, outputYAML)
-	}
-	return false, nil
+	return true, writeStructuredValue(w, page, page.Entries, pageInfo, outputJSON, outputYAML)
 }
 
 func writeEntryPageSummary(w io.Writer, page *core.EntryPage, noun string) error {

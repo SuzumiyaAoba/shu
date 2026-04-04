@@ -2,7 +2,6 @@ package core
 
 import (
 	"encoding/json"
-	"sync"
 	"time"
 )
 
@@ -190,24 +189,10 @@ type FeedStats struct {
 }
 
 type entryMetadataCache struct {
-	mu sync.RWMutex
-
-	categoriesParsed   bool
-	categories         []EntryCategory
-	categoriesErr      error
-	enclosuresParsed   bool
-	enclosures         []EntryEnclosure
-	enclosuresErr      error
-	authorsParsed      bool
-	authors            []EntryPerson
-	authorsErr         error
-	linksParsed        bool
-	links              []EntryLink
-	linksErr           error
-	contributorsParsed bool
-	contributors       []EntryPerson
-	contributorsErr    error
-	sourceParsed       bool
-	source             *EntrySource
-	sourceErr          error
+	categories   cachedValue[[]EntryCategory]
+	enclosures   cachedValue[[]EntryEnclosure]
+	authors      cachedValue[[]EntryPerson]
+	links        cachedValue[[]EntryLink]
+	contributors cachedValue[[]EntryPerson]
+	source       cachedValue[*EntrySource]
 }

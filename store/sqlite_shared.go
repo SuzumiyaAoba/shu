@@ -126,30 +126,12 @@ func scanEntry(s scanner) (*core.Entry, error) {
 		return nil, err
 	}
 
-	e.Categories = []byte(categories)
-	if len(e.Categories) == 0 {
-		e.Categories = nil
-	}
-	e.Enclosures = []byte(enclosures)
-	if len(e.Enclosures) == 0 {
-		e.Enclosures = nil
-	}
-	e.Authors = []byte(authors)
-	if len(e.Authors) == 0 {
-		e.Authors = nil
-	}
-	e.Links = []byte(links)
-	if len(e.Links) == 0 {
-		e.Links = nil
-	}
-	e.Contributors = []byte(contributors)
-	if len(e.Contributors) == 0 {
-		e.Contributors = nil
-	}
-	e.Source = []byte(source)
-	if len(e.Source) == 0 {
-		e.Source = nil
-	}
+	e.Categories = toNilIfEmpty(categories)
+	e.Enclosures = toNilIfEmpty(enclosures)
+	e.Authors = toNilIfEmpty(authors)
+	e.Links = toNilIfEmpty(links)
+	e.Contributors = toNilIfEmpty(contributors)
+	e.Source = toNilIfEmpty(source)
 
 	return &e, nil
 }
@@ -202,6 +184,13 @@ func collectEntries(rows *sql.Rows) ([]*core.Entry, error) {
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
+}
+
+func toNilIfEmpty(s string) []byte {
+	if s == "" {
+		return nil
+	}
+	return []byte(s)
 }
 
 func collectTags(rows *sql.Rows) ([]core.Tag, error) {
