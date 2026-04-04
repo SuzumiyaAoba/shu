@@ -1,3 +1,4 @@
+-- +goose Up
 -- Tag management for feeds.
 CREATE TABLE IF NOT EXISTS tags (
     id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -11,3 +12,8 @@ CREATE TABLE IF NOT EXISTS feed_tags (
 );
 
 CREATE INDEX idx_feed_tags_tag_id ON feed_tags(tag_id);
+
+-- +goose Down
+DROP INDEX IF EXISTS idx_feed_tags_tag_id;
+DROP TABLE IF EXISTS feed_tags;
+DROP TABLE IF EXISTS tags;

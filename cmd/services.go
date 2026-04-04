@@ -14,6 +14,7 @@ type feedService interface {
 	ListFeeds(ctx context.Context) ([]*core.Feed, error)
 	FetchFeed(ctx context.Context, feedID int64) ([]*core.Entry, error)
 	FetchAll(ctx context.Context) (int, error)
+	FetchAllWithObserver(ctx context.Context, observer core.FetchObserver) (int, error)
 	DiscoverFeeds(ctx context.Context, pageURL string) ([]string, error)
 	UpdateFeed(ctx context.Context, id int64, update core.FeedUpdate) error
 	RemoveFeed(ctx context.Context, id int64) error

@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TABLE IF NOT EXISTS feeds (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     url        TEXT NOT NULL UNIQUE,
@@ -21,3 +22,9 @@ CREATE TABLE IF NOT EXISTS entries (
 
 CREATE INDEX IF NOT EXISTS idx_entries_feed_id ON entries(feed_id);
 CREATE INDEX IF NOT EXISTS idx_entries_published_at ON entries(published_at);
+
+-- +goose Down
+DROP INDEX IF EXISTS idx_entries_published_at;
+DROP INDEX IF EXISTS idx_entries_feed_id;
+DROP TABLE IF EXISTS entries;
+DROP TABLE IF EXISTS feeds;

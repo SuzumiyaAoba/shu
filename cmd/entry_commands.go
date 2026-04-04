@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/k3a/html2text"
 	"github.com/spf13/cobra"
 )
 
@@ -71,9 +72,14 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 			}
 
 			render := renderEntriesTable
-			if entriesFormat == "markdown" {
+			switch entriesFormat {
+			case "markdown":
 				render = func(w io.Writer, entries []*core.Entry) error {
-					return renderEntriesMarkdown(cmd, entries)
+					return renderEntriesMarkdown(cmd, entries, false)
+				}
+			case "text":
+				render = func(w io.Writer, entries []*core.Entry) error {
+					return renderEntriesMarkdown(cmd, entries, true)
 				}
 			}
 			return renderEntryPageOutput(cmd, page, entryPageOutputOptions{
@@ -91,11 +97,11 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 	entriesCmd.Flags().BoolVar(&entriesUnread, "unread", false, "show only unread entries")
 	entriesCmd.Flags().BoolVar(&entriesStarred, "starred", false, "show only starred entries")
 	entriesCmd.Flags().StringVar(&entriesTag, "tag", "", "filter by feed tag")
-	entriesCmd.Flags().StringVar(&entriesFormat, "format", "", "output format: markdown")
+	entriesCmd.Flags().StringVar(&entriesFormat, "format", "", "output format: markdown, text")
 	return entriesCmd
 }
 
-func renderEntriesMarkdown(cmd *cobra.Command, entries []*core.Entry) error {
+func renderEntriesMarkdown(cmd *cobra.Command, entries []*core.Entry, convertHTML bool) error {
 	out := cmd.OutOrStdout()
 	for i, e := range entries {
 		if i > 0 {
@@ -127,12 +133,15 @@ func renderEntriesMarkdown(cmd *cobra.Command, entries []*core.Entry) error {
 		if _, err := fmt.Fprintln(out); err != nil {
 			return err
 		}
-		if e.Content != "" {
-			if _, err := fmt.Fprintln(out, e.Content); err != nil {
-				return err
-			}
-		} else if e.Summary != "" {
-			if _, err := fmt.Fprintln(out, e.Summary); err != nil {
+		body := e.Content
+		if body == "" {
+			body = e.Summary
+		}
+		if convertHTML && body != "" {
+			body = html2text.HTML2Text(body)
+		}
+		if body != "" {
+			if _, err := fmt.Fprintln(out, body); err != nil {
 				return err
 			}
 		}
