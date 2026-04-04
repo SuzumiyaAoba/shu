@@ -10,7 +10,7 @@ import (
 
 // FeedStats returns aggregate statistics for all feeds.
 func (s *SQLiteStore) FeedStats(ctx context.Context) ([]core.FeedStats, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.executor(ctx).QueryContext(ctx, `
 		SELECT
 			f.id, f.title, f.url,
 			COUNT(e.id) AS total,
@@ -42,7 +42,7 @@ func (s *SQLiteStore) FeedStats(ctx context.Context) ([]core.FeedStats, error) {
 // entries. Returns the number of deleted entries.
 func (s *SQLiteStore) CleanupEntries(ctx context.Context, olderThan time.Time) (int, error) {
 	cutoff := olderThan.UTC().Format(time.RFC3339)
-	result, err := s.db.ExecContext(ctx,
+	result, err := s.executor(ctx).ExecContext(ctx,
 		`DELETE FROM entries WHERE fetched_at < ? AND starred_at IS NULL`, cutoff,
 	)
 	if err != nil {

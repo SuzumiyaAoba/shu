@@ -73,6 +73,13 @@ type MaintenanceStore interface {
 	CleanupEntries(ctx context.Context, olderThan time.Time) (int, error)
 }
 
+// TxRunner executes fn inside a single database transaction. If the context
+// already carries a transaction, the existing one is reused. The transaction
+// is rolled back on error and committed on success.
+type TxRunner interface {
+	RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
 // Store is the full persistence contract required by [Service].
 // It composes all role-specific interfaces. Implementations must be safe for
 // concurrent use.
@@ -83,6 +90,7 @@ type Store interface {
 	EntryStateStore
 	TagStore
 	MaintenanceStore
+	TxRunner
 	Close() error
 }
 

@@ -132,7 +132,7 @@ allowing it to participate in an outer transaction (avoiding nested transaction 
 
 ## Completion Criteria
 
-- [ ] Test confirms `EnableFeed` rolls back on partial failure
-- [ ] Test confirms `RemoveDeadFeeds` rolls back on partial failure
-- [ ] All existing tests pass
-- [ ] `AddEntries` can participate in outer transaction
+- [x] Test confirms `EnableFeed` rolls back on partial failure
+- [x] Test confirms `RemoveDeadFeeds` rolls back on partial failure
+- [x] All existing tests pass
+- [x] `AddEntries` can participate in outer transaction

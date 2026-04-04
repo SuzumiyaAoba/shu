@@ -1,10 +1,61 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
 )
+
+// sqlExecutor abstracts *sql.DB and *sql.Tx so store methods work inside or
+// outside a transaction transparently.
+type sqlExecutor interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
+}
+
+type txKey struct{}
+
+func contextWithTx(ctx context.Context, tx *sql.Tx) context.Context {
+	return context.WithValue(ctx, txKey{}, tx)
+}
+
+func txFromContext(ctx context.Context) *sql.Tx {
+	tx, _ := ctx.Value(txKey{}).(*sql.Tx)
+	return tx
+}
+
+// executor returns the active transaction from ctx if one exists, otherwise
+// falls back to the connection pool. Store methods call this instead of s.db
+// directly so they participate in outer transactions automatically.
+func (s *SQLiteStore) executor(ctx context.Context) sqlExecutor {
+	if tx := txFromContext(ctx); tx != nil {
+		return tx
+	}
+	return s.db
+}
+
+// RunInTx executes fn inside a database transaction. If ctx already carries a
+// transaction the existing one is reused (no nested transactions). On error the
+// transaction is rolled back; on success it is committed.
+func (s *SQLiteStore) RunInTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	if txFromContext(ctx) != nil {
+		return fn(ctx)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := fn(contextWithTx(ctx, tx)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
 // SQLiteOptions controls runtime settings for [SQLiteStore].
 type SQLiteOptions struct {

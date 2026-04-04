@@ -408,6 +408,103 @@ func TestGetEntryNotFound(t *testing.T) {
 	}
 }
 
+func TestRunInTxCommitsOnSuccess(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Before"}
+	_ = s.AddFeed(ctx, feed)
+
+	err := s.RunInTx(ctx, func(ctx context.Context) error {
+		return s.SetFeedDisabled(ctx, feed.ID, true)
+	})
+	if err != nil {
+		t.Fatalf("RunInTx failed: %v", err)
+	}
+
+	got, _ := s.GetFeed(ctx, feed.ID)
+	if !got.Disabled {
+		t.Error("expected feed to be disabled after committed transaction")
+	}
+}
+
+func TestRunInTxRollsBackOnError(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Before"}
+	_ = s.AddFeed(ctx, feed)
+
+	boom := errors.New("intentional failure")
+	err := s.RunInTx(ctx, func(ctx context.Context) error {
+		// Change disabled state inside the transaction, then fail.
+		_ = s.SetFeedDisabled(ctx, feed.ID, true)
+		return boom
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("expected boom error, got %v", err)
+	}
+
+	got, _ := s.GetFeed(ctx, feed.ID)
+	if got.Disabled {
+		t.Error("expected feed to remain enabled after rolled-back transaction")
+	}
+}
+
+func TestRunInTxReusesOuterTransaction(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Before"}
+	_ = s.AddFeed(ctx, feed)
+
+	boom := errors.New("outer failure")
+	err := s.RunInTx(ctx, func(ctx context.Context) error {
+		// Inner RunInTx reuses the outer transaction.
+		_ = s.RunInTx(ctx, func(ctx context.Context) error {
+			return s.SetFeedDisabled(ctx, feed.ID, true)
+		})
+		return boom // outer error causes rollback of inner change too
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("expected boom, got %v", err)
+	}
+
+	got, _ := s.GetFeed(ctx, feed.ID)
+	if got.Disabled {
+		t.Error("expected feed to remain enabled: inner change rolled back with outer tx")
+	}
+}
+
+func TestEnableFeedRollsBackOnPartialFailure(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// Add a feed with an error so it gets disabled.
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Feed"}
+	_ = s.AddFeed(ctx, feed)
+	_ = s.SetFeedDisabled(ctx, feed.ID, true)
+	_ = s.RecordFeedError(ctx, feed.ID, "some error")
+
+	// Simulate a transaction where SetFeedDisabled succeeds but ResetFeedError
+	// would fail by wrapping both in a RunInTx that we force to roll back.
+	boom := errors.New("reset error failure")
+	err := s.RunInTx(ctx, func(ctx context.Context) error {
+		if err := s.SetFeedDisabled(ctx, feed.ID, false); err != nil {
+			return err
+		}
+		return boom
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("expected boom, got %v", err)
+	}
+
+	got, _ := s.GetFeed(ctx, feed.ID)
+	if !got.Disabled {
+		t.Error("expected feed to remain disabled after rolled-back transaction")
+	}
+}
+
 func TestFindDuplicateEntries(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

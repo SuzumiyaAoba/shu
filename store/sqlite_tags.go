@@ -9,11 +9,11 @@ import (
 
 // AddTag creates a tag (if it doesn't exist) and associates it with a feed.
 func (s *SQLiteStore) AddTag(ctx context.Context, feedID int64, tagName string) error {
-	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO tags (name) VALUES (?)`, tagName)
+	_, err := s.executor(ctx).ExecContext(ctx, `INSERT OR IGNORE INTO tags (name) VALUES (?)`, tagName)
 	if err != nil {
 		return fmt.Errorf("insert tag: %w", err)
 	}
-	_, err = s.db.ExecContext(ctx,
+	_, err = s.executor(ctx).ExecContext(ctx,
 		`INSERT OR IGNORE INTO feed_tags (feed_id, tag_id) SELECT ?, id FROM tags WHERE name = ?`,
 		feedID, tagName,
 	)
@@ -25,7 +25,7 @@ func (s *SQLiteStore) AddTag(ctx context.Context, feedID int64, tagName string) 
 
 // RemoveTag removes a tag association from a feed.
 func (s *SQLiteStore) RemoveTag(ctx context.Context, feedID int64, tagName string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.executor(ctx).ExecContext(ctx,
 		`DELETE FROM feed_tags WHERE feed_id = ? AND tag_id = (SELECT id FROM tags WHERE name = ?)`,
 		feedID, tagName,
 	)
@@ -37,7 +37,7 @@ func (s *SQLiteStore) RemoveTag(ctx context.Context, feedID int64, tagName strin
 
 // ListTags returns all tags associated with a given feed.
 func (s *SQLiteStore) ListTags(ctx context.Context, feedID int64) ([]core.Tag, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.executor(ctx).QueryContext(ctx,
 		`SELECT t.id, t.name FROM tags t JOIN feed_tags ft ON ft.tag_id = t.id WHERE ft.feed_id = ? ORDER BY t.name`,
 		feedID,
 	)
@@ -49,7 +49,7 @@ func (s *SQLiteStore) ListTags(ctx context.Context, feedID int64) ([]core.Tag, e
 
 // ListAllTags returns every tag in the system.
 func (s *SQLiteStore) ListAllTags(ctx context.Context) ([]core.Tag, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name FROM tags ORDER BY name`)
+	rows, err := s.executor(ctx).QueryContext(ctx, `SELECT id, name FROM tags ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list all tags: %w", err)
 	}
@@ -58,7 +58,7 @@ func (s *SQLiteStore) ListAllTags(ctx context.Context) ([]core.Tag, error) {
 
 // ListFeedTags returns every feed-tag association grouped by feed ID.
 func (s *SQLiteStore) ListFeedTags(ctx context.Context) (map[int64][]core.Tag, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.executor(ctx).QueryContext(ctx, `
 		SELECT ft.feed_id, t.id, t.name
 		FROM feed_tags ft
 		JOIN tags t ON t.id = ft.tag_id
@@ -83,7 +83,7 @@ func (s *SQLiteStore) ListFeedTags(ctx context.Context) (map[int64][]core.Tag, e
 
 // ListFeedsByTag returns all feeds associated with the given tag name.
 func (s *SQLiteStore) ListFeedsByTag(ctx context.Context, tagName string) ([]*core.Feed, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.executor(ctx).QueryContext(ctx,
 		`SELECT `+feedColumns+` FROM feeds WHERE id IN (SELECT ft.feed_id FROM feed_tags ft JOIN tags t ON t.id = ft.tag_id WHERE t.name = ?) ORDER BY id`,
 		tagName,
 	)

@@ -27,10 +27,18 @@ func (m *MaintenanceOps) RemoveDeadFeeds(ctx context.Context) ([]*Feed, error) {
 		return nil, err
 	}
 
-	for _, feed := range dead {
-		if err := m.feedStore.RemoveFeed(ctx, feed.ID); err != nil {
-			return nil, err
+	if err := m.feedStore.RunInTx(ctx, func(ctx context.Context) error {
+		for _, feed := range dead {
+			if err := m.feedStore.RemoveFeed(ctx, feed.ID); err != nil {
+				return err
+			}
 		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	for _, feed := range dead {
 		m.logger.Info("feed removed", "id", feed.ID)
 	}
 	return dead, nil

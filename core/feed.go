@@ -13,6 +13,7 @@ import (
 type feedManagerStore interface {
 	FeedStore
 	FeedHealthStore
+	TxRunner
 }
 
 // FeedManager owns feed CRUD and enabled/disabled state changes.
