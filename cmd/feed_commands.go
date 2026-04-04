@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/SuzumiyaAoba/shu/core"
 	"github.com/spf13/cobra"
@@ -113,7 +114,25 @@ func newFetchCmd(getService feedServiceGetter) *cobra.Command {
 				return err
 			}
 
-			count, err := svc.FetchAll(ctx)
+			// Show a progress bar when stderr is a TTY and --quiet is not set.
+			quiet, _ := cmd.Root().PersistentFlags().GetBool("quiet")
+			var observer core.FetchObserver
+			var progress *fetchProgress
+			if !quiet && isTTY(os.Stderr) {
+				feeds, err := svc.ListFeeds(ctx)
+				if err != nil {
+					return err
+				}
+				if len(feeds) > 0 {
+					progress = newFetchProgress(os.Stderr, len(feeds))
+					observer = progress
+				}
+			}
+
+			count, err := svc.FetchAllWithObserver(ctx, observer)
+			if progress != nil {
+				progress.Wait()
+			}
 			if err != nil {
 				return err
 			}

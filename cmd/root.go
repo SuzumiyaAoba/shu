@@ -28,6 +28,7 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 	var logLevel string
 	var sqliteBusyTimeout time.Duration
 	var sqliteMaxOpenConns int
+	var quiet bool
 	runtime := &rootRuntime{}
 	getService := newCoreServiceGetter(injected, runtime)
 
@@ -67,6 +68,7 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level (debug, info, warn, error)")
 	rootCmd.PersistentFlags().DurationVar(&sqliteBusyTimeout, "sqlite-busy-timeout", 0, "SQLite busy timeout (e.g. 5s)")
 	rootCmd.PersistentFlags().IntVar(&sqliteMaxOpenConns, "sqlite-max-open-conns", 0, "SQLite max open connections")
+	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "suppress progress output")
 
 	rootCmd.AddCommand(feedCommands(adaptServiceGetter[feedService](getService))...)
 	rootCmd.AddCommand(entryCommands(adaptServiceGetter[entryService](getService))...)

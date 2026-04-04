@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -125,6 +127,15 @@ func writeStderrf(w io.Writer, format string, args ...any) error {
 
 func writeWarning(w io.Writer, format string, args ...any) error {
 	return writeStderrf(w, "warning: "+format, args...)
+}
+
+// isTTY returns true when w is a file descriptor connected to a terminal.
+func isTTY(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	return isatty.IsTerminal(f.Fd())
 }
 
 func feedStatus(disabled bool, errorCount int) string {
