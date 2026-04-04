@@ -114,8 +114,27 @@ func (m *FeedManager) RemoveFeed(ctx context.Context, id int64) error {
 	return nil
 }
 
+// AddFeedDirect registers a feed without performing any HTTP fetch or
+// validation. The feed's URL must be non-empty. This is intended for bulk
+// imports (e.g. OPML) where metadata comes from the import source rather
+// than the feed server. Invalid URLs will fail when the feed is fetched.
+func (m *FeedManager) AddFeedDirect(ctx context.Context, feed *Feed) error {
+	if feed.URL == "" {
+		return fmt.Errorf("feed URL is required")
+	}
+	if err := m.store.AddFeed(ctx, feed); err != nil {
+		return fmt.Errorf("store feed: %w", err)
+	}
+	m.logger.Info("feed added (direct)", "id", feed.ID, "url", feed.URL)
+	return nil
+}
+
 func (s *Service) AddFeed(ctx context.Context, url string, titleOverride string) (*Feed, error) {
 	return s.feeds.AddFeed(ctx, url, titleOverride)
+}
+
+func (s *Service) AddFeedDirect(ctx context.Context, feed *Feed) error {
+	return s.feeds.AddFeedDirect(ctx, feed)
 }
 
 func (s *Service) ListFeeds(ctx context.Context) ([]*Feed, error) {
