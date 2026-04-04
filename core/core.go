@@ -12,6 +12,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/hashicorp/go-retryablehttp"
 )
 
 // FeedStore handles feed CRUD operations.
@@ -187,10 +189,14 @@ func normalizeLogger(logger *slog.Logger) *slog.Logger {
 }
 
 func defaultHTTPClient() *http.Client {
-	return &http.Client{
+	rc := retryablehttp.NewClient()
+	rc.RetryMax = 3
+	rc.Logger = nil // silence default stdlib logger
+	rc.HTTPClient = &http.Client{
 		Timeout:   30 * time.Second,
 		Transport: &userAgentTransport{base: http.DefaultTransport},
 	}
+	return rc.StandardClient()
 }
 
 func normalizeHTTPClient(client *http.Client) *http.Client {

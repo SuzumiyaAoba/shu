@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func TestAddEntries(t *testing.T) {
@@ -81,38 +83,20 @@ func TestAddEntriesExpandedFields(t *testing.T) {
 	}
 
 	e := result[0]
-	if e.Content != "<p>Full HTML content</p>" {
-		t.Errorf("Content = %q, want %q", e.Content, "<p>Full HTML content</p>")
+	want := entries[0]
+	// Timestamps are stored as UTC in SQLite, so we exclude them from the diff
+	// and check non-nil separately.
+	if diff := cmp.Diff(want, e,
+		cmpopts.IgnoreFields(core.Entry{}, "ID", "FetchedAt", "ReadAt", "StarredAt", "PublishedAt", "UpdatedAt"),
+		cmpopts.IgnoreUnexported(core.Entry{}),
+	); diff != "" {
+		t.Errorf("entry mismatch (-want +got):\n%s", diff)
 	}
-	if e.Author != "John Doe" {
-		t.Errorf("Author = %q, want %q", e.Author, "John Doe")
-	}
-	if e.ImageURL != "https://example.com/image.jpg" {
-		t.Errorf("ImageURL = %q, want %q", e.ImageURL, "https://example.com/image.jpg")
-	}
-	if string(e.Categories) != `["go","rss","tech"]` {
-		t.Errorf("Categories = %q, want %q", e.Categories, `["go","rss","tech"]`)
+	if e.PublishedAt == nil {
+		t.Error("expected PublishedAt to be set")
 	}
 	if e.UpdatedAt == nil {
 		t.Error("expected UpdatedAt to be set")
-	}
-	if string(e.Enclosures) != `[{"url":"https://example.com/ep1.mp3","length":"12345","type":"audio/mpeg"}]` {
-		t.Errorf("Enclosures = %q, want JSON with podcast enclosure", e.Enclosures)
-	}
-	if string(e.Authors) != `[{"name":"John Doe","email":"john@example.com","uri":"https://john.example.com"}]` {
-		t.Errorf("Authors = %q", e.Authors)
-	}
-	if string(e.Links) != `[{"href":"https://example.com/full","rel":"alternate","type":"text/html","hreflang":"","title":"","length":""}]` {
-		t.Errorf("Links = %q", e.Links)
-	}
-	if string(e.Contributors) != `[{"name":"Jane","email":"jane@example.com","uri":""}]` {
-		t.Errorf("Contributors = %q", e.Contributors)
-	}
-	if e.Rights != "Copyright 2026" {
-		t.Errorf("Rights = %q, want %q", e.Rights, "Copyright 2026")
-	}
-	if string(e.Source) != `{"title":"Original","id":"urn:uuid:source","updated":"2026-01-01T00:00:00Z"}` {
-		t.Errorf("Source = %q", e.Source)
 	}
 }
 
