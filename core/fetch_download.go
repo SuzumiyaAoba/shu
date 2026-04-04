@@ -14,14 +14,14 @@ type fetchedFeedDocument struct {
 
 // fetchBody downloads the feed document at the given URL and returns the raw
 // response body. This is used by AddFeed where no conditional GET is needed.
-func (s *Service) fetchBody(ctx context.Context, url string) ([]byte, error) {
-	body, _, err := s.fetchBodyConditional(ctx, url, "", "")
+func fetchBody(ctx context.Context, client *http.Client, url string) ([]byte, error) {
+	body, _, err := fetchBodyConditional(ctx, client, url, "", "")
 	return body, err
 }
 
 // fetchBodyConditional downloads the feed document with optional conditional
 // GET headers (If-None-Match, If-Modified-Since). Returns nil body on 304.
-func (s *Service) fetchBodyConditional(ctx context.Context, url, etag, lastModified string) ([]byte, http.Header, error) {
+func fetchBodyConditional(ctx context.Context, client *http.Client, url, etag, lastModified string) ([]byte, http.Header, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create request: %w", err)
@@ -33,7 +33,7 @@ func (s *Service) fetchBodyConditional(ctx context.Context, url, etag, lastModif
 		req.Header.Set("If-Modified-Since", lastModified)
 	}
 
-	resp, err := s.httpClient().Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("http get: %w", err)
 	}
@@ -54,13 +54,13 @@ func (s *Service) fetchBodyConditional(ctx context.Context, url, etag, lastModif
 	return body, resp.Header, nil
 }
 
-func (s *Service) downloadFeedDocument(ctx context.Context, feed *Feed) (*fetchedFeedDocument, bool, error) {
-	body, headers, err := s.fetchBodyConditional(ctx, feed.URL, feed.ETag, feed.LastModified)
+func (f *Fetcher) downloadFeedDocument(ctx context.Context, feed *Feed) (*fetchedFeedDocument, bool, error) {
+	body, headers, err := fetchBodyConditional(ctx, f.client, feed.URL, feed.ETag, feed.LastModified)
 	if err != nil {
-		return nil, false, s.handleFeedDownloadError(ctx, feed, err)
+		return nil, false, f.handleFeedDownloadError(ctx, feed, err)
 	}
 	if body == nil {
-		if err := s.markFeedFetched(ctx, feed.ID); err != nil {
+		if err := f.markFeedFetched(ctx, feed.ID); err != nil {
 			return nil, false, err
 		}
 		return nil, true, nil
@@ -68,13 +68,13 @@ func (s *Service) downloadFeedDocument(ctx context.Context, feed *Feed) (*fetche
 	return &fetchedFeedDocument{body: body, headers: headers}, false, nil
 }
 
-func (s *Service) handleFeedDownloadError(ctx context.Context, feed *Feed, err error) error {
+func (f *Fetcher) handleFeedDownloadError(ctx context.Context, feed *Feed, err error) error {
 	fetchErr := fmt.Errorf("fetch feed %s: %w", feed.URL, err)
 	if ctx.Err() != nil {
 		return fetchErr
 	}
-	if recErr := s.store.RecordFeedError(ctx, feed.ID, err.Error()); recErr != nil {
-		s.logger.Warn("failed to record feed error", "id", feed.ID, "error", recErr)
+	if recErr := f.store.RecordFeedError(ctx, feed.ID, err.Error()); recErr != nil {
+		f.logger.Warn("failed to record feed error", "id", feed.ID, "error", recErr)
 	}
 	return fetchErr
 }

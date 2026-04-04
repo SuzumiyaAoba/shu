@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"sort"
 	"time"
 )
@@ -53,15 +54,43 @@ type OPMLOutline struct {
 	Outlines []OPMLOutline `xml:"outline,omitempty"`
 }
 
+type opmlFeedAdder interface {
+	AddFeed(ctx context.Context, url string, titleOverride string) (*Feed, error)
+}
+
+type opmlTagAdder interface {
+	AddTag(ctx context.Context, feedID int64, tagName string) error
+}
+
+// OPMLHandler owns OPML import/export workflows.
+type OPMLHandler struct {
+	feedStore FeedStore
+	tagStore  TagStore
+	feeds     opmlFeedAdder
+	tags      opmlTagAdder
+	logger    *slog.Logger
+}
+
+// NewOPMLHandler creates an OPML domain service.
+func NewOPMLHandler(feedStore FeedStore, tagStore TagStore, feeds opmlFeedAdder, tags opmlTagAdder, logger *slog.Logger) *OPMLHandler {
+	return &OPMLHandler{
+		feedStore: feedStore,
+		tagStore:  tagStore,
+		feeds:     feeds,
+		tags:      tags,
+		logger:    normalizeLogger(logger),
+	}
+}
+
 // ExportOPML generates an OPML document containing all registered feeds.
 // Feeds are grouped by their tags; untagged feeds appear at the top level.
-func (s *Service) ExportOPML(ctx context.Context) (*OPML, error) {
-	feeds, err := s.store.ListFeeds(ctx)
+func (h *OPMLHandler) ExportOPML(ctx context.Context) (*OPML, error) {
+	feeds, err := h.feedStore.ListFeeds(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list feeds: %w", err)
 	}
 
-	feedTags, err := s.store.ListFeedTags(ctx)
+	feedTags, err := h.tagStore.ListFeedTags(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list feed tags: %w", err)
 	}
@@ -127,26 +156,26 @@ func feedToOutline(f *Feed) OPMLOutline {
 // ImportOPML reads an OPML document and adds all feeds found in it.
 // Nested outlines (categories) are imported as cumulative tags from root to
 // leaf. Duplicate feeds are reused; other add failures are returned.
-func (s *Service) ImportOPML(ctx context.Context, r io.Reader) (int, error) {
+func (h *OPMLHandler) ImportOPML(ctx context.Context, r io.Reader) (int, error) {
 	opml, err := decodeOPML(r)
 	if err != nil {
 		return 0, err
 	}
 
-	importer := newOPMLImporter(s, nil)
+	importer := newOPMLImporter(h, nil)
 	return importer.importAll(ctx, opml.Body.Outlines)
 }
 
 // ImportOPMLDetailed imports an OPML document and returns a detailed summary of
 // additions, reused feeds, tag applications, and non-fatal issues.
-func (s *Service) ImportOPMLDetailed(ctx context.Context, r io.Reader) (*OPMLImportResult, error) {
+func (h *OPMLHandler) ImportOPMLDetailed(ctx context.Context, r io.Reader) (*OPMLImportResult, error) {
 	opml, err := decodeOPML(r)
 	if err != nil {
 		return &OPMLImportResult{}, err
 	}
 
 	result := &OPMLImportResult{}
-	importer := newOPMLImporter(s, result)
+	importer := newOPMLImporter(h, result)
 	_, err = importer.importAll(ctx, opml.Body.Outlines)
 	return result, err
 }
@@ -160,12 +189,12 @@ func decodeOPML(r io.Reader) (*OPML, error) {
 }
 
 type opmlImporter struct {
-	service *Service
+	handler *OPMLHandler
 	result  *OPMLImportResult
 }
 
-func newOPMLImporter(service *Service, result *OPMLImportResult) *opmlImporter {
-	return &opmlImporter{service: service, result: result}
+func newOPMLImporter(handler *OPMLHandler, result *OPMLImportResult) *opmlImporter {
+	return &opmlImporter{handler: handler, result: result}
 }
 
 func (i *opmlImporter) importAll(ctx context.Context, outlines []OPMLOutline) (int, error) {
@@ -225,7 +254,7 @@ func (i *opmlImporter) importOutline(ctx context.Context, outline OPMLOutline, p
 }
 
 func (i *opmlImporter) ensureFeed(ctx context.Context, url, title string) (*Feed, int, error) {
-	feed, err := i.service.AddFeed(ctx, url, title)
+	feed, err := i.handler.feeds.AddFeed(ctx, url, title)
 	if err == nil {
 		if i.result != nil {
 			i.result.AddedCount++
@@ -234,11 +263,11 @@ func (i *opmlImporter) ensureFeed(ctx context.Context, url, title string) (*Feed
 	}
 
 	if errors.Is(err, ErrFeedAlreadyExists) {
-		i.service.logger.Info("reuse duplicate OPML feed", "url", url)
+		i.handler.logger.Info("reuse duplicate OPML feed", "url", url)
 		if i.result != nil {
 			i.result.ReusedCount++
 		}
-		existingFeed, getErr := i.service.store.GetFeedByURL(ctx, url)
+		existingFeed, getErr := i.handler.feedStore.GetFeedByURL(ctx, url)
 		if getErr != nil {
 			return nil, 0, fmt.Errorf("get duplicate OPML feed %s: %w", url, getErr)
 		}
@@ -258,7 +287,7 @@ func (i *opmlImporter) ensureFeed(ctx context.Context, url, title string) (*Feed
 
 func (i *opmlImporter) applyTags(ctx context.Context, feedID int64, feedURL string, tags []string) error {
 	for _, tag := range tags {
-		if err := i.service.AddTag(ctx, feedID, tag); err != nil {
+		if err := i.handler.tags.AddTag(ctx, feedID, tag); err != nil {
 			tagErr := fmt.Errorf("%w: tag OPML feed %s with %q: %v", ErrTagApplyFailed, feedURL, tag, err)
 			if i.result != nil {
 				i.result.Issues = append(i.result.Issues, OPMLImportIssue{
@@ -275,4 +304,16 @@ func (i *opmlImporter) applyTags(ctx context.Context, feedID int64, feedURL stri
 		}
 	}
 	return nil
+}
+
+func (s *Service) ExportOPML(ctx context.Context) (*OPML, error) {
+	return s.opml.ExportOPML(ctx)
+}
+
+func (s *Service) ImportOPML(ctx context.Context, r io.Reader) (int, error) {
+	return s.opml.ImportOPML(ctx, r)
+}
+
+func (s *Service) ImportOPMLDetailed(ctx context.Context, r io.Reader) (*OPMLImportResult, error) {
+	return s.opml.ImportOPMLDetailed(ctx, r)
 }

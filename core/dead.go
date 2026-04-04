@@ -4,8 +4,8 @@ import "context"
 
 // ListDeadFeeds returns feeds with recorded fetch failures.
 // Manually disabled feeds without recorded errors are excluded.
-func (s *Service) ListDeadFeeds(ctx context.Context) ([]*Feed, error) {
-	feeds, err := s.store.ListFeeds(ctx)
+func (m *MaintenanceOps) ListDeadFeeds(ctx context.Context) ([]*Feed, error) {
+	feeds, err := m.feedStore.ListFeeds(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -21,16 +21,25 @@ func (s *Service) ListDeadFeeds(ctx context.Context) ([]*Feed, error) {
 
 // RemoveDeadFeeds deletes feeds with recorded fetch failures and returns the
 // removed feeds.
-func (s *Service) RemoveDeadFeeds(ctx context.Context) ([]*Feed, error) {
-	dead, err := s.ListDeadFeeds(ctx)
+func (m *MaintenanceOps) RemoveDeadFeeds(ctx context.Context) ([]*Feed, error) {
+	dead, err := m.ListDeadFeeds(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, feed := range dead {
-		if err := s.RemoveFeed(ctx, feed.ID); err != nil {
+		if err := m.feedStore.RemoveFeed(ctx, feed.ID); err != nil {
 			return nil, err
 		}
+		m.logger.Info("feed removed", "id", feed.ID)
 	}
 	return dead, nil
+}
+
+func (s *Service) ListDeadFeeds(ctx context.Context) ([]*Feed, error) {
+	return s.maintenance.ListDeadFeeds(ctx)
+}
+
+func (s *Service) RemoveDeadFeeds(ctx context.Context) ([]*Feed, error) {
+	return s.maintenance.RemoveDeadFeeds(ctx)
 }
