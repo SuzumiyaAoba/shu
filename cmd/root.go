@@ -69,6 +69,7 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 	rootCmd.PersistentFlags().DurationVar(&sqliteBusyTimeout, "sqlite-busy-timeout", 0, "SQLite busy timeout (e.g. 5s)")
 	rootCmd.PersistentFlags().IntVar(&sqliteMaxOpenConns, "sqlite-max-open-conns", 0, "SQLite max open connections")
 	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "suppress progress output")
+	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable colored table output")
 
 	rootCmd.AddCommand(feedCommands(adaptServiceGetter[feedService](getService))...)
 	rootCmd.AddCommand(entryCommands(adaptServiceGetter[entryService](getService))...)
