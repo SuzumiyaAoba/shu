@@ -16,11 +16,16 @@ func (m *FeedManager) UpdateFeed(ctx context.Context, id int64, update FeedUpdat
 
 // EnableFeed re-enables a disabled feed and resets its error count.
 func (m *FeedManager) EnableFeed(ctx context.Context, id int64) error {
-	if err := m.store.SetFeedDisabled(ctx, id, false); err != nil {
-		return fmt.Errorf("enable feed %d: %w", id, err)
-	}
-	if err := m.store.ResetFeedError(ctx, id); err != nil {
-		return fmt.Errorf("reset errors feed %d: %w", id, err)
+	if err := m.store.RunInTx(ctx, func(ctx context.Context) error {
+		if err := m.store.SetFeedDisabled(ctx, id, false); err != nil {
+			return fmt.Errorf("enable feed %d: %w", id, err)
+		}
+		if err := m.store.ResetFeedError(ctx, id); err != nil {
+			return fmt.Errorf("reset errors feed %d: %w", id, err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 	m.logger.Info("feed enabled", "id", id)
 	return nil

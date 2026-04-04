@@ -20,32 +20,28 @@ type entryFilterQuery struct {
 //
 // Returns the number of rows actually inserted (i.e. excluding duplicates).
 // If the input slice is empty or nil, it returns (0, nil) immediately without
-// opening a transaction.
+// opening a transaction. Participates in an outer transaction if one is
+// present in ctx.
 func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (int, error) {
 	if len(entries) == 0 {
 		return 0, nil
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	inserted, err := addEntriesTx(ctx, tx, entries)
+	inserted := 0
+	err := s.RunInTx(ctx, func(ctx context.Context) error {
+		var err error
+		inserted, err = addEntriesEx(ctx, s.executor(ctx), entries)
+		return err
+	})
 	if err != nil {
 		return 0, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit: %w", err)
 	}
 	return inserted, nil
 }
 
 // GetEntry retrieves a single entry by its primary key.
 func (s *SQLiteStore) GetEntry(ctx context.Context, id int64) (*core.Entry, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT `+entryColumns+` FROM entries WHERE id = ?`, id)
+	row := s.executor(ctx).QueryRowContext(ctx, `SELECT `+entryColumns+` FROM entries WHERE id = ?`, id)
 	return fetchEntry(row, fmt.Sprintf("entry %d", id))
 }
 
@@ -60,7 +56,7 @@ func (s *SQLiteStore) GetEntry(ctx context.Context, id int64) (*core.Entry, erro
 func (s *SQLiteStore) ListEntries(ctx context.Context, filter core.EntryFilter) ([]*core.Entry, error) {
 	query, args := newEntryFilterQuery(filter).buildSelectEntries(filter)
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := s.executor(ctx).QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query entries: %w", err)
 	}
@@ -72,7 +68,7 @@ func (s *SQLiteStore) CountEntries(ctx context.Context, filter core.EntryFilter)
 	query, args := newEntryFilterQuery(filter).buildCountEntries()
 
 	var count int
-	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
+	if err := s.executor(ctx).QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count entries: %w", err)
 	}
 	return count, nil
@@ -143,7 +139,7 @@ func (s *SQLiteStore) SearchEntriesPage(ctx context.Context, query string, limit
 	if limit <= 0 {
 		limit = 20
 	}
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.executor(ctx).QueryContext(ctx,
 		`SELECT `+entryColumns+` FROM entries WHERE id IN (SELECT rowid FROM entries_fts WHERE entries_fts MATCH ?) ORDER BY fetched_at DESC LIMIT ? OFFSET ?`,
 		query, limit, offset,
 	)
@@ -156,7 +152,7 @@ func (s *SQLiteStore) SearchEntriesPage(ctx context.Context, query string, limit
 // CountSearchEntries returns the total number of entries matching the FTS query.
 func (s *SQLiteStore) CountSearchEntries(ctx context.Context, query string) (int, error) {
 	var count int
-	if err := s.db.QueryRowContext(ctx,
+	if err := s.executor(ctx).QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM entries WHERE id IN (SELECT rowid FROM entries_fts WHERE entries_fts MATCH ?)`,
 		query,
 	).Scan(&count); err != nil {
@@ -168,7 +164,7 @@ func (s *SQLiteStore) CountSearchEntries(ctx context.Context, query string) (int
 // FindDuplicateEntries returns entries from other feeds that share the same
 // link URL as the given entry.
 func (s *SQLiteStore) FindDuplicateEntries(ctx context.Context, entryID int64) ([]*core.Entry, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.executor(ctx).QueryContext(ctx,
 		`SELECT `+entryColumns+` FROM entries WHERE link = (SELECT link FROM entries WHERE id = ?) AND id != ? AND link != ''`,
 		entryID, entryID,
 	)
@@ -178,8 +174,8 @@ func (s *SQLiteStore) FindDuplicateEntries(ctx context.Context, entryID int64) (
 	return collectEntries(rows)
 }
 
-func addEntriesTx(ctx context.Context, tx *sql.Tx, entries []*core.Entry) (int, error) {
-	stmt, err := tx.PrepareContext(ctx, insertEntrySQL)
+func addEntriesEx(ctx context.Context, ex sqlExecutor, entries []*core.Entry) (int, error) {
+	stmt, err := ex.PrepareContext(ctx, insertEntrySQL)
 	if err != nil {
 		return 0, fmt.Errorf("prepare statement: %w", err)
 	}

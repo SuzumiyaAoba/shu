@@ -7,15 +7,20 @@ import (
 	"time"
 )
 
+type maintenanceFeedStore interface {
+	FeedStore
+	TxRunner
+}
+
 // MaintenanceOps owns cleanup and maintenance workflows.
 type MaintenanceOps struct {
-	feedStore FeedStore
+	feedStore maintenanceFeedStore
 	store     MaintenanceStore
 	logger    *slog.Logger
 }
 
 // NewMaintenanceOps creates a maintenance domain service.
-func NewMaintenanceOps(feedStore FeedStore, store MaintenanceStore, logger *slog.Logger) *MaintenanceOps {
+func NewMaintenanceOps(feedStore maintenanceFeedStore, store MaintenanceStore, logger *slog.Logger) *MaintenanceOps {
 	return &MaintenanceOps{
 		feedStore: feedStore,
 		store:     store,

@@ -30,7 +30,7 @@ func (s *SQLiteStore) updateEntriesColumn(ctx context.Context, column string, va
 	}
 
 	query, args := buildEntriesColumnUpdate(column, value, ids)
-	_, err := s.db.ExecContext(ctx, query, args...)
+	_, err := s.executor(ctx).ExecContext(ctx, query, args...)
 	return err
 }
 

@@ -16,6 +16,7 @@ type feedPersistStore interface {
 	UpdateFeedFetchedAt(ctx context.Context, id int64) error
 	ResetFeedError(ctx context.Context, id int64) error
 	UpdateFeedCacheHeaders(ctx context.Context, id int64, etag, lastModified string) error
+	TxRunner
 }
 
 type feedFetchedMarker interface {
@@ -44,6 +45,7 @@ func newStoreFeedPersister(store feedPersistStore, logger *slog.Logger) *storeFe
 }
 
 func (p *storeFeedPersister) persist(ctx context.Context, feed *Feed, document *fetchedFeedDocument) (*persistedFeedEntries, error) {
+	// Cache headers are best-effort and do not need to be part of the transaction.
 	storeConditionalHeaders(ctx, p.store, p.logger, feed.ID, document.headers)
 
 	entries, err := parseFetchedEntries(feed.ID, feed.URL, document.body)
@@ -51,16 +53,22 @@ func (p *storeFeedPersister) persist(ctx context.Context, feed *Feed, document *
 		return nil, err
 	}
 
-	inserted, err := p.store.AddEntries(ctx, entries)
-	if err != nil {
-		return nil, fmt.Errorf("store entries: %w", err)
-	}
-	if err := markFeedFetched(ctx, p.store, feed.ID); err != nil {
+	inserted := 0
+	if err := p.store.RunInTx(ctx, func(ctx context.Context) error {
+		var err error
+		inserted, err = p.store.AddEntries(ctx, entries)
+		if err != nil {
+			return fmt.Errorf("store entries: %w", err)
+		}
+		if err := markFeedFetched(ctx, p.store, feed.ID); err != nil {
+			return err
+		}
+		if err := p.store.ResetFeedError(ctx, feed.ID); err != nil {
+			p.logger.Warn("failed to reset feed error", "id", feed.ID, "error", err)
+		}
+		return nil
+	}); err != nil {
 		return nil, err
-	}
-
-	if err := p.store.ResetFeedError(ctx, feed.ID); err != nil {
-		p.logger.Warn("failed to reset feed error", "id", feed.ID, "error", err)
 	}
 
 	p.logger.Info("feed fetched", "id", feed.ID, "title", feed.Title, "new_entries", inserted)

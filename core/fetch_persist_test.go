@@ -51,6 +51,10 @@ func (s *stubPersistStore) UpdateFeedCacheHeaders(_ context.Context, id int64, e
 	return s.cacheHeaderErr
 }
 
+func (s *stubPersistStore) RunInTx(ctx context.Context, fn func(context.Context) error) error {
+	return fn(ctx)
+}
+
 func TestStoreFeedPersisterPersistStoresEntriesAndUpdatesFeedState(t *testing.T) {
 	store := &stubPersistStore{inserted: 2}
 	persister := newStoreFeedPersister(store, nil)

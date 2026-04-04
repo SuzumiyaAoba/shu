@@ -92,4 +92,8 @@ func (BaseFakeStore) FeedStats(context.Context) ([]core.FeedStats, error) { retu
 
 func (BaseFakeStore) CleanupEntries(context.Context, time.Time) (int, error) { return 0, nil }
 
+func (BaseFakeStore) RunInTx(ctx context.Context, fn func(context.Context) error) error {
+	return fn(ctx)
+}
+
 func (BaseFakeStore) Close() error { return nil }

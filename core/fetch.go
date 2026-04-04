@@ -11,6 +11,7 @@ type fetcherStore interface {
 	FeedStore
 	FeedHealthStore
 	EntryStore
+	TxRunner
 }
 
 // Fetcher owns feed download, parse, and persistence workflows.

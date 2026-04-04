@@ -19,7 +19,7 @@ const sqliteConstraintUnique = 2067
 // constraint violation).
 func (s *SQLiteStore) AddFeed(ctx context.Context, feed *core.Feed) error {
 	now := time.Now().UTC()
-	result, err := s.db.ExecContext(ctx,
+	result, err := s.executor(ctx).ExecContext(ctx,
 		`INSERT INTO feeds (url, title, site_url, added_at, description, language, image_url, feed_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		feed.URL, feed.Title, feed.SiteURL, nowRFC3339(),
 		feed.Description, feed.Language, feed.ImageURL, feed.FeedType,
@@ -43,7 +43,7 @@ func (s *SQLiteStore) AddFeed(ctx context.Context, feed *core.Feed) error {
 // GetFeed retrieves a single feed by its primary key.
 // Returns a "scan feed" error wrapping sql.ErrNoRows if the ID does not exist.
 func (s *SQLiteStore) GetFeed(ctx context.Context, id int64) (*core.Feed, error) {
-	row := s.db.QueryRowContext(ctx,
+	row := s.executor(ctx).QueryRowContext(ctx,
 		`SELECT `+feedColumns+` FROM feeds WHERE id = ?`, id,
 	)
 	return fetchFeed(row, fmt.Sprintf("feed %d", id))
@@ -51,7 +51,7 @@ func (s *SQLiteStore) GetFeed(ctx context.Context, id int64) (*core.Feed, error)
 
 // GetFeedByURL retrieves a single feed by its unique URL.
 func (s *SQLiteStore) GetFeedByURL(ctx context.Context, url string) (*core.Feed, error) {
-	row := s.db.QueryRowContext(ctx,
+	row := s.executor(ctx).QueryRowContext(ctx,
 		`SELECT `+feedColumns+` FROM feeds WHERE url = ?`, url,
 	)
 	return fetchFeed(row, fmt.Sprintf("feed %s", url))
@@ -60,7 +60,7 @@ func (s *SQLiteStore) GetFeedByURL(ctx context.Context, url string) (*core.Feed,
 // ListFeeds returns all registered feeds ordered by ascending ID.
 // Returns an empty (non-nil) slice if no feeds are registered.
 func (s *SQLiteStore) ListFeeds(ctx context.Context) ([]*core.Feed, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.executor(ctx).QueryContext(ctx,
 		`SELECT `+feedColumns+` FROM feeds ORDER BY id`,
 	)
 	if err != nil {
@@ -73,7 +73,7 @@ func (s *SQLiteStore) ListFeeds(ctx context.Context) ([]*core.Feed, error) {
 // constraint on the entries table, all entries belonging to this feed are also
 // deleted. No error is returned if the ID does not exist.
 func (s *SQLiteStore) RemoveFeed(ctx context.Context, id int64) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM feeds WHERE id = ?`, id)
+	_, err := s.executor(ctx).ExecContext(ctx, `DELETE FROM feeds WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete feed: %w", err)
 	}
@@ -84,7 +84,7 @@ func (s *SQLiteStore) RemoveFeed(ctx context.Context, id int64) error {
 // time. This is called after a successful fetch cycle to record when the feed
 // was last refreshed.
 func (s *SQLiteStore) UpdateFeedFetchedAt(ctx context.Context, id int64) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.executor(ctx).ExecContext(ctx,
 		`UPDATE feeds SET fetched_at = ? WHERE id = ?`, nowRFC3339(), id,
 	)
 	if err != nil {
@@ -115,7 +115,7 @@ func (s *SQLiteStore) UpdateFeed(ctx context.Context, id int64, update core.Feed
 	args = append(args, id)
 	query := "UPDATE feeds SET " + strings.Join(sets, ", ") + " WHERE id = ?"
 
-	_, err := s.db.ExecContext(ctx, query, args...)
+	_, err := s.executor(ctx).ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("update feed: %w", err)
 	}
@@ -125,7 +125,7 @@ func (s *SQLiteStore) UpdateFeed(ctx context.Context, id int64, update core.Feed
 // UpdateFeedCacheHeaders stores the HTTP ETag and Last-Modified headers
 // received during a fetch.
 func (s *SQLiteStore) UpdateFeedCacheHeaders(ctx context.Context, id int64, etag, lastModified string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.executor(ctx).ExecContext(ctx,
 		`UPDATE feeds SET etag = ?, last_modified = ? WHERE id = ?`,
 		etag, lastModified, id,
 	)
@@ -142,7 +142,7 @@ const maxErrorCount = 5
 // RecordFeedError increments the error count and stores the error message.
 // If the count reaches maxErrorCount the feed is automatically disabled.
 func (s *SQLiteStore) RecordFeedError(ctx context.Context, id int64, errMsg string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.executor(ctx).ExecContext(ctx,
 		`UPDATE feeds SET error_count = error_count + 1, last_error = ?, disabled = CASE WHEN error_count + 1 >= ? THEN 1 ELSE disabled END WHERE id = ?`,
 		errMsg, maxErrorCount, id,
 	)
@@ -154,7 +154,7 @@ func (s *SQLiteStore) RecordFeedError(ctx context.Context, id int64, errMsg stri
 
 // ResetFeedError clears the error count and last error after a successful fetch.
 func (s *SQLiteStore) ResetFeedError(ctx context.Context, id int64) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.executor(ctx).ExecContext(ctx,
 		`UPDATE feeds SET error_count = 0, last_error = '' WHERE id = ?`, id,
 	)
 	if err != nil {
@@ -169,7 +169,7 @@ func (s *SQLiteStore) SetFeedDisabled(ctx context.Context, id int64, disabled bo
 	if disabled {
 		val = 1
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE feeds SET disabled = ? WHERE id = ?`, val, id)
+	_, err := s.executor(ctx).ExecContext(ctx, `UPDATE feeds SET disabled = ? WHERE id = ?`, val, id)
 	if err != nil {
 		return fmt.Errorf("set feed disabled: %w", err)
 	}
