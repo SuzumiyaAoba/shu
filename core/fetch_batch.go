@@ -19,14 +19,14 @@ const fetchWorkerCount = 10
 //
 // Feeds that have a per-feed interval set and were fetched more recently than
 // that interval are skipped.
-func (s *Service) FetchAll(ctx context.Context) (int, error) {
-	return s.FetchAllWithObserver(ctx, nil)
+func (f *Fetcher) FetchAll(ctx context.Context) (int, error) {
+	return f.FetchAllWithObserver(ctx, nil)
 }
 
 // FetchAllWithObserver fetches all eligible feeds while emitting structured
 // progress events to observer.
-func (s *Service) FetchAllWithObserver(ctx context.Context, observer FetchObserver) (int, error) {
-	feeds, err := s.store.ListFeeds(ctx)
+func (f *Fetcher) FetchAllWithObserver(ctx context.Context, observer FetchObserver) (int, error) {
+	feeds, err := f.store.ListFeeds(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("list feeds: %w", err)
 	}
@@ -37,7 +37,7 @@ func (s *Service) FetchAllWithObserver(ctx context.Context, observer FetchObserv
 		return 0, nil
 	}
 
-	return s.fetchFeedsConcurrently(ctx, toFetch, notifier)
+	return f.fetchFeedsConcurrently(ctx, toFetch, notifier)
 }
 
 func filterFeedsForFetch(feeds []*Feed, notifier *fetchNotifier, now time.Time) []*Feed {
@@ -59,7 +59,7 @@ func shouldSkipFeedInterval(feed *Feed, now time.Time) bool {
 	return now.Sub(*feed.FetchedAt) < time.Duration(feed.FetchIntervalSec)*time.Second
 }
 
-func (s *Service) fetchFeedsConcurrently(ctx context.Context, feeds []*Feed, notifier *fetchNotifier) (int, error) {
+func (f *Fetcher) fetchFeedsConcurrently(ctx context.Context, feeds []*Feed, notifier *fetchNotifier) (int, error) {
 	jobs := make(chan *Feed)
 	workers := min(fetchWorkerCount, len(feeds))
 	var total atomic.Int64
@@ -77,12 +77,12 @@ func (s *Service) fetchFeedsConcurrently(ctx context.Context, feeds []*Feed, not
 					return
 				}
 
-				entries, err := s.fetchFeed(ctx, feed, notifier)
+				entries, err := f.fetchFeed(ctx, feed, notifier)
 				if err != nil {
 					if ctx.Err() != nil {
 						return
 					}
-					s.logger.Error("failed to fetch feed", "id", feed.ID, "url", feed.URL, "error", err)
+					f.logger.Error("failed to fetch feed", "id", feed.ID, "url", feed.URL, "error", err)
 					continue
 				}
 				total.Add(int64(len(entries)))
@@ -113,4 +113,12 @@ func (s *Service) fetchFeedsConcurrently(ctx context.Context, feeds []*Feed, not
 	}
 
 	return int(total.Load()), nil
+}
+
+func (s *Service) FetchAll(ctx context.Context) (int, error) {
+	return s.fetcher.FetchAll(ctx)
+}
+
+func (s *Service) FetchAllWithObserver(ctx context.Context, observer FetchObserver) (int, error) {
+	return s.fetcher.FetchAllWithObserver(ctx, observer)
 }

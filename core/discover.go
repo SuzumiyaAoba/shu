@@ -4,16 +4,31 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 
 	"golang.org/x/net/html"
 )
 
+// FeedDiscovery owns feed URL discovery from HTML pages.
+type FeedDiscovery struct {
+	client *http.Client
+}
+
+// NewFeedDiscovery creates a feed discovery service.
+func NewFeedDiscovery(client *http.Client) *FeedDiscovery {
+	return &FeedDiscovery{client: normalizeHTTPClient(client)}
+}
+
+func (d *FeedDiscovery) setHTTPClient(client *http.Client) {
+	d.client = normalizeHTTPClient(client)
+}
+
 // DiscoverFeeds fetches the HTML page at the given URL and extracts feed URLs
 // from <link rel="alternate"> elements with RSS/Atom MIME types.
-func (s *Service) DiscoverFeeds(ctx context.Context, pageURL string) ([]string, error) {
-	body, err := s.fetchBody(ctx, pageURL)
+func (d *FeedDiscovery) DiscoverFeeds(ctx context.Context, pageURL string) ([]string, error) {
+	body, err := fetchBody(ctx, d.client, pageURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetch page %s: %w", pageURL, err)
 	}
@@ -70,4 +85,8 @@ func resolveURL(base, href string) string {
 		return href
 	}
 	return baseURL.ResolveReference(ref).String()
+}
+
+func (s *Service) DiscoverFeeds(ctx context.Context, pageURL string) ([]string, error) {
+	return s.discovery.DiscoverFeeds(ctx, pageURL)
 }

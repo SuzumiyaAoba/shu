@@ -11,7 +11,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"sync"
 	"time"
 )
 
@@ -106,15 +105,17 @@ func (t *userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error
 	return t.base.RoundTrip(req)
 }
 
-// Service is the central orchestrator for feed management and fetching.
-// It coordinates between the HTTP client (for downloading feeds) and the
-// [Store] (for persistence), and emits structured log messages for
-// observability.
+// Service is a backward-compatible facade over the focused domain types in
+// this package.
 type Service struct {
-	store    Store
-	logger   *slog.Logger
-	client   *http.Client
-	clientMu sync.RWMutex
+	feeds       *FeedManager
+	fetcher     *Fetcher
+	entries     *EntryQueries
+	entryState  *EntryStateManager
+	tags        *TagManager
+	opml        *OPMLHandler
+	maintenance *MaintenanceOps
+	discovery   *FeedDiscovery
 }
 
 // Option customizes a [Service] at construction time.
@@ -145,16 +146,21 @@ func WithHTTPClientWithUserAgent(c *http.Client) Option {
 // The returned service uses an HTTP client with a 30-second timeout and a
 // custom transport that sets the User-Agent header to "shu/0.1".
 func New(store Store, logger *slog.Logger, options ...Option) *Service {
-	if logger == nil {
-		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
-	}
+	logger = normalizeLogger(logger)
+	client := defaultHTTPClient()
+
+	feeds := NewFeedManager(store, logger, client)
+	tags := NewTagManager(store, logger)
+
 	svc := &Service{
-		store:  store,
-		logger: logger,
-		client: &http.Client{
-			Timeout:   30 * time.Second,
-			Transport: &userAgentTransport{base: http.DefaultTransport},
-		},
+		feeds:       feeds,
+		fetcher:     NewFetcher(store, logger, client),
+		entries:     NewEntryQueries(store),
+		entryState:  NewEntryStateManager(store),
+		tags:        tags,
+		opml:        NewOPMLHandler(store, store, feeds, tags, logger),
+		maintenance: NewMaintenanceOps(store, store, logger),
+		discovery:   NewFeedDiscovery(client),
 	}
 	for _, option := range options {
 		if option != nil {
@@ -162,6 +168,27 @@ func New(store Store, logger *slog.Logger, options ...Option) *Service {
 		}
 	}
 	return svc
+}
+
+func normalizeLogger(logger *slog.Logger) *slog.Logger {
+	if logger != nil {
+		return logger
+	}
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func defaultHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: &userAgentTransport{base: http.DefaultTransport},
+	}
+}
+
+func normalizeHTTPClient(client *http.Client) *http.Client {
+	if client != nil {
+		return client
+	}
+	return defaultHTTPClient()
 }
 
 func httpClientWithUserAgent(c *http.Client) *http.Client {
@@ -175,13 +202,7 @@ func httpClientWithUserAgent(c *http.Client) *http.Client {
 }
 
 func (s *Service) setHTTPClient(c *http.Client) {
-	s.clientMu.Lock()
-	defer s.clientMu.Unlock()
-	s.client = c
-}
-
-func (s *Service) httpClient() *http.Client {
-	s.clientMu.RLock()
-	defer s.clientMu.RUnlock()
-	return s.client
+	s.feeds.setHTTPClient(c)
+	s.fetcher.setHTTPClient(c)
+	s.discovery.setHTTPClient(c)
 }
