@@ -88,7 +88,7 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "config file (default ~/.config/shu/config.yaml)")
 	rootCmd.PersistentFlags().StringVar(&dbPath, "db", defaultDB, "path to SQLite database")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level (debug, info, warn, error)")
-	rootCmd.PersistentFlags().DurationVar(&sqliteBusyTimeout, "sqlite-busy-timeout", 0, "SQLite busy timeout (e.g. 5s)")
+	rootCmd.PersistentFlags().DurationVar(&sqliteBusyTimeout, "sqlite-busy-timeout", 5*time.Second, "SQLite busy timeout (e.g. 5s)")
 	rootCmd.PersistentFlags().IntVar(&sqliteMaxOpenConns, "sqlite-max-open-conns", 0, "SQLite max open connections")
 	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "suppress progress output")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable colored table output")
@@ -185,9 +185,6 @@ func initViper(cfgFile string) {
 }
 
 func sqliteOptionsFromFlags(busyTimeout time.Duration, maxOpenConns int) *store.SQLiteOptions {
-	if busyTimeout <= 0 && maxOpenConns <= 0 {
-		return nil
-	}
 	return &store.SQLiteOptions{
 		BusyTimeout:  busyTimeout,
 		MaxOpenConns: maxOpenConns,
