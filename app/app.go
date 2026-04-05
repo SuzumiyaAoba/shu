@@ -3,6 +3,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -19,6 +20,7 @@ type StoreOpener func(dsn string) (core.Store, error)
 
 // Config defines the runtime dependencies needed to bootstrap the application.
 type Config struct {
+	Ctx           context.Context
 	DBPath        string
 	LogLevel      string
 	LogOutput     io.Writer
@@ -102,8 +104,12 @@ func openStore(cfg Config) (core.Store, func() error, error) {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, nil, fmt.Errorf("create db directory: %w", err)
 		}
+		ctx := cfg.Ctx
+		if ctx == nil {
+			ctx = context.Background()
+		}
 		opener = func(dsn string) (core.Store, error) {
-			return store.NewSQLiteStoreWithOptions(dsn, cfg.SQLiteOptions)
+			return store.NewSQLiteStoreWithContext(ctx, dsn, cfg.SQLiteOptions)
 		}
 	}
 

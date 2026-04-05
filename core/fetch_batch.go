@@ -64,14 +64,21 @@ func (f *Fetcher) fetchFeedsConcurrently(ctx context.Context, feeds []*Feed, not
 	jobs := make(chan *Feed)
 	workers := min(fetchWorkerCount, len(feeds))
 	var (
-		total      atomic.Int64
-		wg         sync.WaitGroup
-		errMu      sync.Mutex
-		fetchErrs  []error
+		total     atomic.Int64
+		wg        sync.WaitGroup
+		errMu     sync.Mutex
+		fetchErrs = make([]error, 0, min(len(feeds), 64))
 	)
 
 	worker := func() {
 		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				errMu.Lock()
+				fetchErrs = append(fetchErrs, fmt.Errorf("worker panic: %v", r))
+				errMu.Unlock()
+			}
+		}()
 
 		for {
 			select {

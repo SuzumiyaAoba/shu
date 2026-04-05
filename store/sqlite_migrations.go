@@ -20,7 +20,7 @@ var migrationsFS embed.FS
 // On first run against a database that used the legacy schema_migrations table,
 // it bootstraps goose by marking those versions as already applied so existing
 // data is not touched.
-func (s *SQLiteStore) runMigrations() error {
+func (s *SQLiteStore) runMigrations(ctx context.Context) error {
 	if err := s.bootstrapFromLegacyMigrations(); err != nil {
 		return fmt.Errorf("bootstrap goose from legacy migrations: %w", err)
 	}
@@ -41,7 +41,7 @@ func (s *SQLiteStore) runMigrations() error {
 		return fmt.Errorf("create goose provider: %w", err)
 	}
 
-	if _, err := provider.Up(context.Background()); err != nil {
+	if _, err := provider.Up(ctx); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 	return nil

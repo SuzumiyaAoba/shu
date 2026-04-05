@@ -89,12 +89,18 @@ type SQLiteStore struct {
 //
 // If any step fails, the database is closed and an error is returned.
 func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
-	return NewSQLiteStoreWithOptions(dsn, nil)
+	return NewSQLiteStoreWithContext(context.Background(), dsn, nil)
 }
 
 // NewSQLiteStoreWithOptions opens (or creates) a SQLite database using the
 // provided options.
 func NewSQLiteStoreWithOptions(dsn string, options *SQLiteOptions) (*SQLiteStore, error) {
+	return NewSQLiteStoreWithContext(context.Background(), dsn, options)
+}
+
+// NewSQLiteStoreWithContext opens (or creates) a SQLite database using the
+// provided context for migration execution and optional runtime settings.
+func NewSQLiteStoreWithContext(ctx context.Context, dsn string, options *SQLiteOptions) (*SQLiteStore, error) {
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
@@ -115,7 +121,6 @@ func NewSQLiteStoreWithOptions(dsn string, options *SQLiteOptions) (*SQLiteStore
 	// "database is locked" errors, especially with in-memory databases.
 	db.SetMaxOpenConns(maxOpenConns)
 
-	ctx := context.Background()
 	if _, err := db.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("set journal mode: %w", err)
@@ -130,7 +135,7 @@ func NewSQLiteStoreWithOptions(dsn string, options *SQLiteOptions) (*SQLiteStore
 	}
 
 	s := &SQLiteStore{db: db}
-	if err := s.runMigrations(); err != nil {
+	if err := s.runMigrations(ctx); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
