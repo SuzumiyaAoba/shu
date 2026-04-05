@@ -25,7 +25,7 @@ func TestRemoveDeadFeedsCmd(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	svc := core.New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), core.WithHTTPClient(ts.Client()))
+	svc := core.New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), core.WithAllowPrivateAddresses(true), core.WithHTTPClient(ts.Client()))
 	setTestService(t, svc)
 
 	ctx := t.Context()
@@ -71,7 +71,7 @@ func TestRemoveDeadFeedsDryRunCmd(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	svc := core.New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), core.WithHTTPClient(ts.Client()))
+	svc := core.New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), core.WithAllowPrivateAddresses(true), core.WithHTTPClient(ts.Client()))
 	setTestService(t, svc)
 
 	ctx := t.Context()

@@ -41,6 +41,9 @@ func newCommandTestService(t *testing.T, handler http.Handler, options ...core.O
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
+	// Allow private addresses so httptest servers (127.0.0.1) pass URL validation.
+	options = append([]core.Option{core.WithAllowPrivateAddresses(true)}, options...)
+
 	var ts *httptest.Server
 	if handler != nil {
 		ts = httptest.NewServer(handler)

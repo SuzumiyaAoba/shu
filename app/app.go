@@ -99,7 +99,7 @@ func openStore(cfg Config) (core.Store, func() error, error) {
 	opener := cfg.OpenStore
 	if opener == nil {
 		dir := filepath.Dir(cfg.DBPath)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, nil, fmt.Errorf("create db directory: %w", err)
 		}
 		opener = func(dsn string) (core.Store, error) {

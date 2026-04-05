@@ -6,6 +6,14 @@ import (
 	"strings"
 )
 
+// validEntryStateColumns is the set of column names that may be used in
+// entry-state UPDATE statements. Any column not in this set is rejected to
+// prevent SQL injection through the unparameterised column name.
+var validEntryStateColumns = map[string]bool{
+	"read_at":    true,
+	"starred_at": true,
+}
+
 func buildIDPlaceholders(ids []int64) (string, []any) {
 	placeholders := make([]string, len(ids))
 	args := make([]any, len(ids))
@@ -16,12 +24,15 @@ func buildIDPlaceholders(ids []int64) (string, []any) {
 	return strings.Join(placeholders, ", "), args
 }
 
-func buildEntriesColumnUpdate(column string, value any, ids []int64) (string, []any) {
+func buildEntriesColumnUpdate(column string, value any, ids []int64) (string, []any, error) {
+	if !validEntryStateColumns[column] {
+		return "", nil, fmt.Errorf("invalid entry state column: %q", column)
+	}
 	placeholders, args := buildIDPlaceholders(ids)
 	if value == nil {
-		return fmt.Sprintf(`UPDATE entries SET %s = NULL WHERE id IN (%s)`, column, placeholders), args
+		return fmt.Sprintf(`UPDATE entries SET %s = NULL WHERE id IN (%s)`, column, placeholders), args, nil
 	}
-	return fmt.Sprintf(`UPDATE entries SET %s = ? WHERE id IN (%s)`, column, placeholders), append([]any{value}, args...)
+	return fmt.Sprintf(`UPDATE entries SET %s = ? WHERE id IN (%s)`, column, placeholders), append([]any{value}, args...), nil
 }
 
 func (s *SQLiteStore) updateEntriesColumn(ctx context.Context, column string, value any, ids []int64) error {
@@ -29,8 +40,11 @@ func (s *SQLiteStore) updateEntriesColumn(ctx context.Context, column string, va
 		return nil
 	}
 
-	query, args := buildEntriesColumnUpdate(column, value, ids)
-	_, err := s.executor(ctx).ExecContext(ctx, query, args...)
+	query, args, err := buildEntriesColumnUpdate(column, value, ids)
+	if err != nil {
+		return err
+	}
+	_, err = s.executor(ctx).ExecContext(ctx, query, args...)
 	return err
 }
 

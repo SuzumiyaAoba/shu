@@ -27,7 +27,7 @@ func TestUserAgentHeader(t *testing.T) {
 	defer func() { _ = s.Close() }()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	testClient := ts.Client()
-	svc := core.New(s, logger, core.WithHTTPClientWithUserAgent(testClient))
+	svc := core.New(s, logger, core.WithAllowPrivateAddresses(true), core.WithHTTPClientWithUserAgent(testClient))
 
 	_, _ = svc.AddFeed(context.Background(), ts.URL+"/feed.xml", "")
 	if gotUA != "shu/0.1" {
@@ -183,7 +183,7 @@ func TestNewWithNilLogger(t *testing.T) {
 	}
 	defer func() { _ = s.Close() }()
 
-	svc := core.New(s, nil, core.WithHTTPClient(ts.Client()))
+	svc := core.New(s, nil, core.WithAllowPrivateAddresses(true), core.WithHTTPClient(ts.Client()))
 
 	ctx := context.Background()
 	if _, err := svc.AddFeed(ctx, ts.URL+"/feed.xml", ""); err != nil {
