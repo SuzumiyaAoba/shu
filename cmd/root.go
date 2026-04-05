@@ -62,6 +62,7 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 			}
 
 			return runtime.open(app.Config{
+				Ctx:           cmd.Context(),
 				DBPath:        dbPath,
 				LogLevel:      logLevel,
 				LogOutput:     os.Stderr,
