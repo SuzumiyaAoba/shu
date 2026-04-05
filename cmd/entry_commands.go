@@ -42,6 +42,8 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 	var entriesStarred bool
 	var entriesTag string
 	var entriesFormat string
+	var publishedAfter string
+	var publishedBefore string
 
 	entriesCmd := &cobra.Command{
 		Use:   "entries",
@@ -65,6 +67,20 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 			}
 			if entriesFeedID > 0 {
 				filter.FeedID = &entriesFeedID
+			}
+			if publishedAfter != "" {
+				t, err := parseDate(publishedAfter)
+				if err != nil {
+					return fmt.Errorf("invalid --published-after: %w", err)
+				}
+				filter.PublishedAfter = &t
+			}
+			if publishedBefore != "" {
+				t, err := parseDate(publishedBefore)
+				if err != nil {
+					return fmt.Errorf("invalid --published-before: %w", err)
+				}
+				filter.PublishedBefore = &t
 			}
 
 			page, err := svc.ListEntriesPage(cmd.Context(), filter)
@@ -102,6 +118,8 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 	entriesCmd.Flags().BoolVar(&entriesStarred, "starred", false, "show only starred entries")
 	entriesCmd.Flags().StringVar(&entriesTag, "tag", "", "filter by feed tag")
 	entriesCmd.Flags().StringVar(&entriesFormat, "format", "", "output format: markdown, text")
+	entriesCmd.Flags().StringVar(&publishedAfter, "published-after", "", "filter entries published on or after this date (YYYY-MM-DD)")
+	entriesCmd.Flags().StringVar(&publishedBefore, "published-before", "", "filter entries published before this date (YYYY-MM-DD)")
 	return entriesCmd
 }
 

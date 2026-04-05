@@ -241,6 +241,33 @@ func TestUpdateFeed(t *testing.T) {
 	}
 }
 
+func TestUpdateFeedFetchIntervalSec(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	_ = s.AddFeed(ctx, feed)
+
+	interval := 3600
+	err := s.UpdateFeed(ctx, feed.ID, core.FeedUpdate{FetchIntervalSec: &interval})
+	if err != nil {
+		t.Fatalf("UpdateFeed failed: %v", err)
+	}
+
+	got, _ := s.GetFeed(ctx, feed.ID)
+	if got.FetchIntervalSec != 3600 {
+		t.Errorf("FetchIntervalSec = %d, want 3600", got.FetchIntervalSec)
+	}
+
+	// Reset to 0
+	zero := 0
+	_ = s.UpdateFeed(ctx, feed.ID, core.FeedUpdate{FetchIntervalSec: &zero})
+	got, _ = s.GetFeed(ctx, feed.ID)
+	if got.FetchIntervalSec != 0 {
+		t.Errorf("FetchIntervalSec = %d, want 0", got.FetchIntervalSec)
+	}
+}
+
 func TestUpdateFeedCacheHeaders(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

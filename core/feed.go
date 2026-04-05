@@ -54,7 +54,7 @@ func (m *FeedManager) AddFeed(ctx context.Context, url string, titleOverride str
 		return nil, fmt.Errorf("validate feed URL: %w", err)
 	}
 
-	body, _, err := fetchBodyConditional(ctx, m.client, url, "", "")
+	body, _, _, err := fetchBodyConditional(ctx, m.client, url, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("fetch feed %s: %w", url, err)
 	}

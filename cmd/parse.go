@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -47,6 +48,12 @@ func (f paginationFlags) resolveOffset() (int, error) {
 		return (f.Page - 1) * f.Limit, nil
 	}
 	return f.Offset, nil
+}
+
+// parseDate parses a date string in YYYY-MM-DD format and returns the
+// corresponding time.Time at midnight UTC.
+func parseDate(s string) (time.Time, error) {
+	return time.Parse("2006-01-02", s)
 }
 
 func addPaginationFlags(cmd *cobra.Command, flags *paginationFlags, limitUsage, offsetUsage string) {
