@@ -115,15 +115,16 @@ func NewSQLiteStoreWithOptions(dsn string, options *SQLiteOptions) (*SQLiteStore
 	// "database is locked" errors, especially with in-memory databases.
 	db.SetMaxOpenConns(maxOpenConns)
 
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("set journal mode: %w", err)
 	}
-	if _, err := db.Exec(fmt.Sprintf("PRAGMA busy_timeout=%d", busyTimeout/time.Millisecond)); err != nil {
+	if _, err := db.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout=%d", busyTimeout/time.Millisecond)); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("set busy timeout: %w", err)
 	}
-	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
+	if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys=ON"); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}

@@ -71,7 +71,10 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 				return err
 			}
 
-			render := renderEntriesTable
+			nc := noColorFlag(cmd)
+			render := func(w io.Writer, entries []*core.Entry) error {
+				return renderEntriesTable(w, entries, nc)
+			}
 			switch entriesFormat {
 			case "markdown":
 				render = func(w io.Writer, entries []*core.Entry) error {
@@ -286,11 +289,14 @@ func newSearchCmd(getService entryServiceGetter) *cobra.Command {
 				return err
 			}
 
+			nc := noColorFlag(cmd)
 			return renderEntryPageOutput(cmd, page, entryPageOutputOptions{
 				PageInfo: pageFlags.PageInfo,
 				Output:   output,
 				Noun:     "results",
-				Render:   renderEntryLinksTable,
+				Render: func(w io.Writer, entries []*core.Entry) error {
+					return renderEntryLinksTable(w, entries, nc)
+				},
 			})
 		},
 	}
@@ -322,7 +328,7 @@ func newDuplicatesCmd(getService entryServiceGetter) *cobra.Command {
 					_, err := fmt.Fprintln(cmd.OutOrStdout(), "No duplicates found.")
 					return err
 				}
-				return renderEntryLinksTable(cmd.OutOrStdout(), dupes)
+				return renderEntryLinksTable(cmd.OutOrStdout(), dupes, noColorFlag(cmd))
 			})
 		},
 	}

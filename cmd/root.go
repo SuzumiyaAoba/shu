@@ -32,6 +32,7 @@ func newRootCmd(injected *core.Service) *cobra.Command {
 	var sqliteBusyTimeout time.Duration
 	var sqliteMaxOpenConns int
 	var quiet bool
+	var noColor bool
 	runtime := &rootRuntime{}
 	getService := newCoreServiceGetter(injected, runtime)
 

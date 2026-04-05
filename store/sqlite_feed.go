@@ -71,11 +71,18 @@ func (s *SQLiteStore) ListFeeds(ctx context.Context) ([]*core.Feed, error) {
 
 // RemoveFeed deletes the feed with the given ID. Due to the ON DELETE CASCADE
 // constraint on the entries table, all entries belonging to this feed are also
-// deleted. No error is returned if the ID does not exist.
+// deleted. Returns [core.ErrFeedNotFound] if no feed with that ID exists.
 func (s *SQLiteStore) RemoveFeed(ctx context.Context, id int64) error {
-	_, err := s.executor(ctx).ExecContext(ctx, `DELETE FROM feeds WHERE id = ?`, id)
+	result, err := s.executor(ctx).ExecContext(ctx, `DELETE FROM feeds WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete feed: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("feed %d: %w", id, core.ErrFeedNotFound)
 	}
 	return nil
 }
@@ -115,9 +122,16 @@ func (s *SQLiteStore) UpdateFeed(ctx context.Context, id int64, update core.Feed
 	args = append(args, id)
 	query := "UPDATE feeds SET " + strings.Join(sets, ", ") + " WHERE id = ?"
 
-	_, err := s.executor(ctx).ExecContext(ctx, query, args...)
+	result, err := s.executor(ctx).ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("update feed: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("feed %d: %w", id, core.ErrFeedNotFound)
 	}
 	return nil
 }

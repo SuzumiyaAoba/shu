@@ -49,7 +49,7 @@ func (m *FeedManager) setHTTPClient(client *http.Client) {
 // An error is returned if the URL is unreachable, the document is not a valid
 // feed, or the store rejects the insertion (e.g. duplicate URL).
 func (m *FeedManager) AddFeed(ctx context.Context, url string, titleOverride string) (*Feed, error) {
-	body, err := fetchBody(ctx, m.client, url)
+	body, _, err := fetchBodyConditional(ctx, m.client, url, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("fetch feed %s: %w", url, err)
 	}

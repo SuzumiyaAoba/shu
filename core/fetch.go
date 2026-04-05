@@ -99,7 +99,7 @@ func (f *Fetcher) fetchFeed(ctx context.Context, feed *Feed, notifier *fetchNoti
 	return newEntries, nil
 }
 
-// GetEntry retrieves a single entry by its primary key.
+// FetchFeed downloads and parses the RSS/Atom feed identified by feedID.
 func (s *Service) FetchFeed(ctx context.Context, feedID int64) ([]*Entry, error) {
 	return s.fetcher.FetchFeed(ctx, feedID)
 }
