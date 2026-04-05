@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/SuzumiyaAoba/shu/core"
 	"github.com/spf13/cobra"
@@ -206,10 +207,11 @@ func newDiscoverCmd(getService feedServiceGetter) *cobra.Command {
 func newUpdateCmd(getService feedServiceGetter) *cobra.Command {
 	var updateTitle string
 	var updateURL string
+	var fetchInterval time.Duration
 
 	updateCmd := &cobra.Command{
 		Use:   "update <id>",
-		Short: "Update a feed's title or URL",
+		Short: "Update a feed's title, URL, or fetch interval",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			update := core.FeedUpdate{}
@@ -218,6 +220,10 @@ func newUpdateCmd(getService feedServiceGetter) *cobra.Command {
 			}
 			if cmd.Flags().Changed("url") {
 				update.URL = &updateURL
+			}
+			if cmd.Flags().Changed("fetch-interval") {
+				sec := int(fetchInterval.Seconds())
+				update.FetchIntervalSec = &sec
 			}
 
 			return runSingleIDCommand(cmd, args, getService, func(svc feedService, ctx context.Context, id int64) error {
@@ -228,6 +234,7 @@ func newUpdateCmd(getService feedServiceGetter) *cobra.Command {
 
 	updateCmd.Flags().StringVar(&updateTitle, "title", "", "new title")
 	updateCmd.Flags().StringVar(&updateURL, "url", "", "new URL")
+	updateCmd.Flags().DurationVar(&fetchInterval, "fetch-interval", 0, "per-feed fetch interval (e.g. 1h, 30m); 0 uses global default")
 	return updateCmd
 }
 

@@ -150,6 +150,12 @@ type EntryFilter struct {
 	Tag string `json:"tag"`
 	// StarredOnly, when true, restricts results to starred entries.
 	StarredOnly bool `json:"starred_only"`
+	// PublishedAfter, when non-nil, restricts results to entries published
+	// on or after this time.
+	PublishedAfter *time.Time `json:"published_after"`
+	// PublishedBefore, when non-nil, restricts results to entries published
+	// before this time.
+	PublishedBefore *time.Time `json:"published_before"`
 }
 
 // EntryPage is a paginated view of entries.
@@ -164,8 +170,9 @@ type EntryPage struct {
 // FeedUpdate holds the mutable fields for updating a feed.
 // Nil pointer fields are left unchanged.
 type FeedUpdate struct {
-	Title *string `json:"title"`
-	URL   *string `json:"url"`
+	Title            *string `json:"title"`
+	URL              *string `json:"url"`
+	FetchIntervalSec *int    `json:"fetch_interval_sec"`
 }
 
 // Tag represents a user-defined label for organizing feeds.

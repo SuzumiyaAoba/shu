@@ -327,6 +327,63 @@ func TestListEntriesAndCountEntriesCombinedFilters(t *testing.T) {
 	}
 }
 
+func TestListEntriesPublishedDateFilter(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	_ = s.AddFeed(ctx, feed)
+
+	t1 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	t3 := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+
+	_, _ = s.AddEntries(ctx, []*core.Entry{
+		{FeedID: feed.ID, GUID: "jan", Title: "January", PublishedAt: &t1, Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed.ID, GUID: "feb", Title: "February", PublishedAt: &t2, Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+		{FeedID: feed.ID, GUID: "mar", Title: "March", PublishedAt: &t3, Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
+	})
+
+	// After Jan 15 → Feb, Mar
+	after := time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC)
+	entries, err := s.ListEntries(ctx, core.EntryFilter{PublishedAfter: &after, Limit: 10})
+	if err != nil {
+		t.Fatalf("ListEntries failed: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("got %d entries, want 2", len(entries))
+	}
+
+	// Before Feb 1 → Jan
+	before := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	entries, err = s.ListEntries(ctx, core.EntryFilter{PublishedBefore: &before, Limit: 10})
+	if err != nil {
+		t.Fatalf("ListEntries failed: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("got %d entries, want 1", len(entries))
+	}
+
+	// Between Jan 15 and Feb 15 → Feb only
+	beforeMid := time.Date(2026, 2, 15, 0, 0, 0, 0, time.UTC)
+	entries, err = s.ListEntries(ctx, core.EntryFilter{PublishedAfter: &after, PublishedBefore: &beforeMid, Limit: 10})
+	if err != nil {
+		t.Fatalf("ListEntries failed: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("got %d entries, want 1", len(entries))
+	}
+
+	// Count should also respect date filters
+	count, err := s.CountEntries(ctx, core.EntryFilter{PublishedAfter: &after})
+	if err != nil {
+		t.Fatalf("CountEntries failed: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("count = %d, want 2", count)
+	}
+}
+
 func TestCleanupEntries(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

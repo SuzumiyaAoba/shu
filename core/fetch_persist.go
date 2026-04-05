@@ -13,6 +13,7 @@ type feedPersister interface {
 
 type feedPersistStore interface {
 	AddEntries(ctx context.Context, entries []*Entry) (int, error)
+	UpdateFeed(ctx context.Context, id int64, update FeedUpdate) error
 	UpdateFeedFetchedAt(ctx context.Context, id int64) error
 	ResetFeedError(ctx context.Context, id int64) error
 	UpdateFeedCacheHeaders(ctx context.Context, id int64, etag, lastModified string) error
@@ -49,6 +50,15 @@ func (p *storeFeedPersister) persist(ctx context.Context, feed *Feed, document *
 
 	// Cache headers are best-effort and do not need to be part of the transaction.
 	storeConditionalHeaders(ctx, p.store, logger, feed.ID, document.headers)
+
+	// Update the stored URL if the server issued a permanent redirect (301).
+	if document.finalURL != "" && document.finalURL != feed.URL {
+		logger.Info("feed URL redirected, updating", "old_url", feed.URL, "new_url", document.finalURL)
+		newURL := document.finalURL
+		if err := p.store.UpdateFeed(ctx, feed.ID, FeedUpdate{URL: &newURL}); err != nil {
+			logger.Warn("failed to update redirected feed URL", "error", err)
+		}
+	}
 
 	entries, err := parseFetchedEntries(feed.ID, feed.URL, document.body)
 	if err != nil {

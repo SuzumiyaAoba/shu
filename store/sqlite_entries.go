@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"iter"
 	"strings"
+	"time"
 
 	"github.com/SuzumiyaAoba/shu/core"
 )
@@ -112,6 +113,12 @@ func newEntryFilterQuery(filter core.EntryFilter) entryFilterQuery {
 	}
 	if filter.StarredOnly {
 		query.add(`starred_at IS NOT NULL`)
+	}
+	if filter.PublishedAfter != nil {
+		query.add(`published_at >= ?`, filter.PublishedAfter.Format(time.RFC3339))
+	}
+	if filter.PublishedBefore != nil {
+		query.add(`published_at < ?`, filter.PublishedBefore.Format(time.RFC3339))
 	}
 
 	return query

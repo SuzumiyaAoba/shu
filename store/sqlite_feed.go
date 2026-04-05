@@ -114,6 +114,10 @@ func (s *SQLiteStore) UpdateFeed(ctx context.Context, id int64, update core.Feed
 		sets = append(sets, "url = ?")
 		args = append(args, *update.URL)
 	}
+	if update.FetchIntervalSec != nil {
+		sets = append(sets, "fetch_interval_sec = ?")
+		args = append(args, *update.FetchIntervalSec)
+	}
 
 	if len(sets) == 0 {
 		return nil
