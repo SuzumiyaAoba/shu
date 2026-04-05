@@ -28,7 +28,7 @@ func (d *FeedDiscovery) setHTTPClient(client *http.Client) {
 // DiscoverFeeds fetches the HTML page at the given URL and extracts feed URLs
 // from <link rel="alternate"> elements with RSS/Atom MIME types.
 func (d *FeedDiscovery) DiscoverFeeds(ctx context.Context, pageURL string) ([]string, error) {
-	body, err := fetchBody(ctx, d.client, pageURL)
+	body, _, err := fetchBodyConditional(ctx, d.client, pageURL, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("fetch page %s: %w", pageURL, err)
 	}

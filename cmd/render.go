@@ -8,14 +8,18 @@ import (
 	"github.com/SuzumiyaAoba/shu/core"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
+	"github.com/spf13/cobra"
 )
 
-// noColor disables lipgloss styling even on a TTY.
-// Set via the --no-color global flag.
-var noColor bool
+// noColorFlag reads the --no-color persistent flag from the root command.
+// It returns false when the flag is absent (e.g. in tests without a full CLI).
+func noColorFlag(cmd *cobra.Command) bool {
+	v, _ := cmd.Root().PersistentFlags().GetBool("no-color")
+	return v
+}
 
 // useStyled returns true when the writer is a TTY and --no-color is not set.
-func useStyled(w io.Writer) bool {
+func useStyled(w io.Writer, noColor bool) bool {
 	return !noColor && isTTY(w)
 }
 
@@ -28,8 +32,8 @@ type tableDefinition[T any] struct {
 }
 
 // renderTable dispatches to the styled or plain renderer depending on the writer.
-func renderTable[T any](w io.Writer, items []T, def tableDefinition[T]) error {
-	if useStyled(w) {
+func renderTable[T any](w io.Writer, items []T, def tableDefinition[T], noColor bool) error {
+	if useStyled(w, noColor) {
 		return renderTableStyled(w, items, def)
 	}
 	return renderTablePlain(w, items, def)
@@ -131,24 +135,24 @@ var feedStatsTableDef = tableDefinition[core.FeedStats]{
 
 // --- Public render functions ---
 
-func renderFeedsTable(w io.Writer, feeds []*core.Feed) error {
-	return renderTable(w, feeds, feedTableDef)
+func renderFeedsTable(w io.Writer, feeds []*core.Feed, noColor bool) error {
+	return renderTable(w, feeds, feedTableDef, noColor)
 }
 
-func renderEntriesTable(w io.Writer, entries []*core.Entry) error {
-	return renderTable(w, entries, entryTableDef)
+func renderEntriesTable(w io.Writer, entries []*core.Entry, noColor bool) error {
+	return renderTable(w, entries, entryTableDef, noColor)
 }
 
-func renderEntryLinksTable(w io.Writer, entries []*core.Entry) error {
-	return renderTable(w, entries, entryLinkTableDef)
+func renderEntryLinksTable(w io.Writer, entries []*core.Entry, noColor bool) error {
+	return renderTable(w, entries, entryLinkTableDef, noColor)
 }
 
-func renderTagsTable(w io.Writer, tags []core.Tag) error {
-	return renderTable(w, tags, tagTableDef)
+func renderTagsTable(w io.Writer, tags []core.Tag, noColor bool) error {
+	return renderTable(w, tags, tagTableDef, noColor)
 }
 
-func renderFeedStatsTable(w io.Writer, stats []core.FeedStats) error {
-	return renderTable(w, stats, feedStatsTableDef)
+func renderFeedStatsTable(w io.Writer, stats []core.FeedStats, noColor bool) error {
+	return renderTable(w, stats, feedStatsTableDef, noColor)
 }
 
 // --- Shared table factory ---

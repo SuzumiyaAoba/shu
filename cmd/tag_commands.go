@@ -90,7 +90,7 @@ func newTagsCmd(getService tagServiceGetter) *cobra.Command {
 				return err
 			}
 			return output.renderOrWrite(cmd.OutOrStdout(), tags, func() error {
-				return renderTagsTable(cmd.OutOrStdout(), tags)
+				return renderTagsTable(cmd.OutOrStdout(), tags, noColorFlag(cmd))
 			})
 		},
 	}

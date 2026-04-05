@@ -77,7 +77,7 @@ func newListCmd(getService feedServiceGetter) *cobra.Command {
 				return err
 			}
 			return output.renderOrWrite(cmd.OutOrStdout(), feeds, func() error {
-				return renderFeedsTable(cmd.OutOrStdout(), feeds)
+				return renderFeedsTable(cmd.OutOrStdout(), feeds, noColorFlag(cmd))
 			})
 		},
 	}

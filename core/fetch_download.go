@@ -40,12 +40,10 @@ func (d *httpFeedDownloader) setHTTPClient(client *http.Client) {
 	d.client = normalizeHTTPClient(client)
 }
 
-// fetchBody downloads the feed document at the given URL and returns the raw
-// response body. This is used by AddFeed where no conditional GET is needed.
-func fetchBody(ctx context.Context, client *http.Client, url string) ([]byte, error) {
-	body, _, err := fetchBodyConditional(ctx, client, url, "", "")
-	return body, err
-}
+// maxFeedBodySize is the upper bound for a downloaded feed document. Feeds
+// larger than this limit are truncated, preventing a malicious server from
+// exhausting available memory.
+const maxFeedBodySize = 10 << 20 // 10 MiB
 
 // fetchBodyConditional downloads the feed document with optional conditional
 // GET headers (If-None-Match, If-Modified-Since). Returns nil body on 304.
@@ -75,7 +73,7 @@ func fetchBodyConditional(ctx context.Context, client *http.Client, url, etag, l
 		return nil, nil, fmt.Errorf("http status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxFeedBodySize))
 	if err != nil {
 		return nil, nil, fmt.Errorf("read body: %w", err)
 	}

@@ -34,7 +34,7 @@ func newStatsCmd(getService maintenanceServiceGetter) *cobra.Command {
 				return err
 			}
 			return output.renderOrWrite(cmd.OutOrStdout(), stats, func() error {
-				return renderFeedStatsTable(cmd.OutOrStdout(), stats)
+				return renderFeedStatsTable(cmd.OutOrStdout(), stats, noColorFlag(cmd))
 			})
 		},
 	}

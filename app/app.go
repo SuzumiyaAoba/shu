@@ -152,16 +152,9 @@ func composeCleanup(closers ...func() error) func() error {
 }
 
 func parseLogLevel(level string) (slog.Level, error) {
-	switch level {
-	case "debug":
-		return slog.LevelDebug, nil
-	case "info":
-		return slog.LevelInfo, nil
-	case "warn":
-		return slog.LevelWarn, nil
-	case "error":
-		return slog.LevelError, nil
-	default:
-		return 0, fmt.Errorf("invalid log level: %q (must be debug, info, warn, error)", level)
+	var l slog.Level
+	if err := l.UnmarshalText([]byte(level)); err != nil {
+		return 0, fmt.Errorf("invalid log level %q: must be debug, info, warn, or error", level)
 	}
+	return l, nil
 }
