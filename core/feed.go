@@ -18,9 +18,10 @@ type feedManagerStore interface {
 
 // FeedManager owns feed CRUD and enabled/disabled state changes.
 type FeedManager struct {
-	store  feedManagerStore
-	logger *slog.Logger
-	client *http.Client
+	store                 feedManagerStore
+	logger                *slog.Logger
+	client                *http.Client
+	allowPrivateAddresses bool
 }
 
 // NewFeedManager creates a feed domain service.
@@ -49,6 +50,10 @@ func (m *FeedManager) setHTTPClient(client *http.Client) {
 // An error is returned if the URL is unreachable, the document is not a valid
 // feed, or the store rejects the insertion (e.g. duplicate URL).
 func (m *FeedManager) AddFeed(ctx context.Context, url string, titleOverride string) (*Feed, error) {
+	if err := ValidateFeedURL(url, m.allowPrivateAddresses); err != nil {
+		return nil, fmt.Errorf("validate feed URL: %w", err)
+	}
+
 	body, _, err := fetchBodyConditional(ctx, m.client, url, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("fetch feed %s: %w", url, err)

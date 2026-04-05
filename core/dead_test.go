@@ -26,7 +26,7 @@ func TestListDeadFeeds(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	svc := core.New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), core.WithHTTPClient(ts.Client()))
+	svc := core.New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), core.WithAllowPrivateAddresses(true), core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	deadFeed, _ := svc.AddFeed(ctx, ts.URL+"/dead.xml", "Dead Feed")
@@ -64,7 +64,7 @@ func TestRemoveDeadFeeds(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	svc := core.New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), core.WithHTTPClient(ts.Client()))
+	svc := core.New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), core.WithAllowPrivateAddresses(true), core.WithHTTPClient(ts.Client()))
 	ctx := context.Background()
 
 	deadFeed, _ := svc.AddFeed(ctx, ts.URL+"/dead.xml", "Dead Feed")

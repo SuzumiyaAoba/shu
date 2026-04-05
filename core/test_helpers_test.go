@@ -25,6 +25,9 @@ func newTestServiceWithOptions(t *testing.T, handler http.Handler, options ...co
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
+	// Allow private addresses so httptest servers (127.0.0.1) pass URL validation.
+	options = append([]core.Option{core.WithAllowPrivateAddresses(true)}, options...)
+
 	if handler != nil {
 		ts := httptest.NewServer(handler)
 		t.Cleanup(ts.Close)

@@ -162,3 +162,31 @@ func (s *openTestService) StarEntries(context.Context, []int64) error { return n
 func (s *openTestService) UnstarEntry(context.Context, int64) error { return nil }
 
 func (s *openTestService) UnstarEntries(context.Context, []int64) error { return nil }
+
+func TestOpenBrowserRejectsNonHTTP(t *testing.T) {
+	tests := []struct {
+		url     string
+		wantErr bool
+	}{
+		{"https://example.com", false},
+		{"http://example.com", false},
+		{"javascript:alert(1)", true},
+		{"file:///etc/passwd", true},
+		{"ftp://example.com/feed.xml", true},
+		{"", true},
+		{"://bad", true},
+	}
+	for _, tt := range tests {
+		err := openBrowser(tt.url)
+		if tt.wantErr && err == nil {
+			t.Errorf("openBrowser(%q): expected error, got nil", tt.url)
+		}
+		if !tt.wantErr && err != nil {
+			// On CI the "open" command may not exist, so we only check
+			// that the scheme validation itself did not reject the URL.
+			if strings.Contains(err.Error(), "refusing to open") {
+				t.Errorf("openBrowser(%q): unexpected scheme rejection: %v", tt.url, err)
+			}
+		}
+	}
+}

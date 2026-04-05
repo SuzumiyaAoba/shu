@@ -157,6 +157,16 @@ func WithHTTPClient(c *http.Client) Option {
 	}
 }
 
+// WithAllowPrivateAddresses permits adding feeds and discovering feeds from
+// private/loopback addresses. This is useful for development and testing with
+// local servers. It should not be enabled in production.
+func WithAllowPrivateAddresses(allow bool) Option {
+	return func(s *Service) {
+		s.feeds.allowPrivateAddresses = allow
+		s.discovery.allowPrivateAddresses = allow
+	}
+}
+
 // WithHTTPClientWithUserAgent configures the service to use the provided HTTP
 // client while preserving the shu User-Agent header.
 func WithHTTPClientWithUserAgent(c *http.Client) Option {
