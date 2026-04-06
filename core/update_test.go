@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 func TestUpdateFeed(t *testing.T) {
@@ -24,7 +25,7 @@ func TestUpdateFeed(t *testing.T) {
 	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
 
 	newTitle := "Updated Title"
-	if err := svc.UpdateFeed(ctx, feed.ID, core.FeedUpdate{Title: &newTitle}); err != nil {
+	if err := svc.UpdateFeed(ctx, feed.ID, model.FeedUpdate{Title: &newTitle}); err != nil {
 		t.Fatalf("UpdateFeed failed: %v", err)
 	}
 

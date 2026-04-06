@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 	"github.com/SuzumiyaAoba/shu/core/coretest"
 )
 
@@ -28,7 +29,7 @@ func TestMarkReadUnread(t *testing.T) {
 	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
 	_, _ = svc.FetchFeed(ctx, feed.ID)
 
-	entries, _ := svc.ListEntries(ctx, core.EntryFilter{Limit: 10})
+	entries, _ := svc.ListEntries(ctx, model.EntryFilter{Limit: 10})
 	if len(entries) == 0 {
 		t.Fatal("expected entries")
 	}
@@ -41,7 +42,7 @@ func TestMarkReadUnread(t *testing.T) {
 	}
 
 	// Unread filter should not include it.
-	unread, _ := svc.ListEntries(ctx, core.EntryFilter{Limit: 10, UnreadOnly: true})
+	unread, _ := svc.ListEntries(ctx, model.EntryFilter{Limit: 10, UnreadOnly: true})
 	if len(unread) != len(entries)-1 {
 		t.Errorf("got %d unread, want %d", len(unread), len(entries)-1)
 	}
@@ -51,7 +52,7 @@ func TestMarkReadUnread(t *testing.T) {
 		t.Fatalf("MarkEntryUnread failed: %v", err)
 	}
 
-	unread, _ = svc.ListEntries(ctx, core.EntryFilter{Limit: 10, UnreadOnly: true})
+	unread, _ = svc.ListEntries(ctx, model.EntryFilter{Limit: 10, UnreadOnly: true})
 	if len(unread) != len(entries) {
 		t.Errorf("got %d unread, want %d", len(unread), len(entries))
 	}
@@ -71,7 +72,7 @@ func TestMarkEntriesReadUnread(t *testing.T) {
 	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
 	_, _ = svc.FetchFeed(ctx, feed.ID)
 
-	entries, _ := svc.ListEntries(ctx, core.EntryFilter{Limit: 10})
+	entries, _ := svc.ListEntries(ctx, model.EntryFilter{Limit: 10})
 	if len(entries) < 2 {
 		t.Fatal("expected at least 2 entries")
 	}
@@ -82,7 +83,7 @@ func TestMarkEntriesReadUnread(t *testing.T) {
 		t.Fatalf("MarkEntriesRead failed: %v", err)
 	}
 
-	unread, _ := svc.ListEntries(ctx, core.EntryFilter{Limit: 10, UnreadOnly: true})
+	unread, _ := svc.ListEntries(ctx, model.EntryFilter{Limit: 10, UnreadOnly: true})
 	if len(unread) != len(entries)-2 {
 		t.Errorf("got %d unread, want %d", len(unread), len(entries)-2)
 	}
@@ -91,7 +92,7 @@ func TestMarkEntriesReadUnread(t *testing.T) {
 		t.Fatalf("MarkEntriesUnread failed: %v", err)
 	}
 
-	unread, _ = svc.ListEntries(ctx, core.EntryFilter{Limit: 10, UnreadOnly: true})
+	unread, _ = svc.ListEntries(ctx, model.EntryFilter{Limit: 10, UnreadOnly: true})
 	if len(unread) != len(entries) {
 		t.Errorf("got %d unread, want %d", len(unread), len(entries))
 	}

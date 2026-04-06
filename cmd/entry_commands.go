@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 	"github.com/k3a/html2text"
 	"github.com/spf13/cobra"
 )
@@ -58,7 +58,7 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 				return err
 			}
 
-			filter := core.EntryFilter{
+			filter := model.EntryFilter{
 				Limit:       pageFlags.Limit,
 				Offset:      offset,
 				UnreadOnly:  entriesUnread,
@@ -89,16 +89,16 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 			}
 
 			nc := noColorFlag(cmd)
-			render := func(w io.Writer, entries []*core.Entry) error {
+			render := func(w io.Writer, entries []*model.Entry) error {
 				return renderEntriesTable(w, entries, nc)
 			}
 			switch entriesFormat {
 			case "markdown":
-				render = func(w io.Writer, entries []*core.Entry) error {
+				render = func(w io.Writer, entries []*model.Entry) error {
 					return renderEntriesMarkdown(cmd, entries, false)
 				}
 			case "text":
-				render = func(w io.Writer, entries []*core.Entry) error {
+				render = func(w io.Writer, entries []*model.Entry) error {
 					return renderEntriesMarkdown(cmd, entries, true)
 				}
 			}
@@ -123,7 +123,7 @@ func newEntriesCmd(getService entryServiceGetter) *cobra.Command {
 	return entriesCmd
 }
 
-func renderEntriesMarkdown(cmd *cobra.Command, entries []*core.Entry, convertHTML bool) error {
+func renderEntriesMarkdown(cmd *cobra.Command, entries []*model.Entry, convertHTML bool) error {
 	out := cmd.OutOrStdout()
 	for i, e := range entries {
 		if i > 0 {
@@ -317,7 +317,7 @@ func newSearchCmd(getService entryServiceGetter) *cobra.Command {
 				PageInfo: pageFlags.PageInfo,
 				Output:   output,
 				Noun:     "results",
-				Render: func(w io.Writer, entries []*core.Entry) error {
+				Render: func(w io.Writer, entries []*model.Entry) error {
 					return renderEntryLinksTable(w, entries, nc)
 				},
 			})

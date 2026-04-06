@@ -5,22 +5,22 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 func TestFeedStats(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	feed := &model.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
 	_ = s.AddFeed(ctx, feed)
 
-	_, _ = s.AddEntries(ctx, []*core.Entry{
+	_, _ = s.AddEntries(ctx, []*model.Entry{
 		{FeedID: feed.ID, GUID: "1", Title: "E1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed.ID, GUID: "2", Title: "E2", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	})
 
-	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 1})
+	entries, _ := s.ListEntries(ctx, model.EntryFilter{Limit: 1})
 	_ = s.MarkEntryRead(ctx, entries[0].ID)
 	_ = s.StarEntry(ctx, entries[0].ID)
 
@@ -46,7 +46,7 @@ func TestFeedStatsNoEntries(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	feed := &model.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
 	_ = s.AddFeed(ctx, feed)
 
 	stats, err := s.FeedStats(ctx)

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 // newTestServiceNoHTTP creates a service that is not expected to make any HTTP
@@ -163,7 +164,7 @@ func TestImportOPMLDuplicateSkip(t *testing.T) {
 	ctx := context.Background()
 
 	// Add the feed first via AddFeedDirect.
-	_ = svc.AddFeedDirect(ctx, &core.Feed{URL: "https://example.com/feed.xml", Title: "Existing"})
+	_ = svc.AddFeedDirect(ctx, &model.Feed{URL: "https://example.com/feed.xml", Title: "Existing"})
 
 	opmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0">
@@ -185,7 +186,7 @@ func TestImportOPMLDuplicateAddsTag(t *testing.T) {
 	svc := newTestServiceNoHTTP(t)
 	ctx := context.Background()
 
-	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Existing"}
+	feed := &model.Feed{URL: "https://example.com/feed.xml", Title: "Existing"}
 	if err := svc.AddFeedDirect(ctx, feed); err != nil {
 		t.Fatalf("AddFeedDirect failed: %v", err)
 	}
@@ -242,7 +243,7 @@ func TestImportOPMLDetailed(t *testing.T) {
 	ctx := context.Background()
 
 	// Pre-register a feed so it shows as reused.
-	_ = svc.AddFeedDirect(ctx, &core.Feed{URL: "https://example.com/feed1.xml", Title: "Existing"})
+	_ = svc.AddFeedDirect(ctx, &model.Feed{URL: "https://example.com/feed1.xml", Title: "Existing"})
 
 	opmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0">
@@ -280,7 +281,7 @@ func TestImportOPMLInvalidDocument(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected invalid OPML error")
 	}
-	if !errors.Is(err, core.ErrInvalidOPML) {
+	if !errors.Is(err, model.ErrInvalidOPML) {
 		t.Fatalf("expected ErrInvalidOPML, got %v", err)
 	}
 }

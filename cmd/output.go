@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -41,7 +41,7 @@ type entryPageOutputOptions struct {
 	PageInfo bool
 	Output   structuredOutputOptions
 	Noun     string
-	Render   func(io.Writer, []*core.Entry) error
+	Render   func(io.Writer, []*model.Entry) error
 }
 
 func addStructuredOutputFlags(cmd *cobra.Command, outputJSON, outputYAML *bool) {
@@ -50,7 +50,7 @@ func addStructuredOutputFlags(cmd *cobra.Command, outputJSON, outputYAML *bool) 
 	cmd.MarkFlagsMutuallyExclusive("json", "yaml")
 }
 
-func renderEntryPageOutput(cmd *cobra.Command, page *core.EntryPage, options entryPageOutputOptions) error {
+func renderEntryPageOutput(cmd *cobra.Command, page *model.EntryPage, options entryPageOutputOptions) error {
 	out := cmd.OutOrStdout()
 
 	var value any = page.Entries
@@ -70,7 +70,7 @@ func renderEntryPageOutput(cmd *cobra.Command, page *core.EntryPage, options ent
 	return nil
 }
 
-func writeEntryPageSummary(w io.Writer, page *core.EntryPage, noun string) error {
+func writeEntryPageSummary(w io.Writer, page *model.EntryPage, noun string) error {
 	if _, err := fmt.Fprintf(w, "Showing %d/%d %s", len(page.Entries), page.TotalCount, noun); err != nil {
 		return err
 	}

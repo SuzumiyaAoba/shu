@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 	sqlite "modernc.org/sqlite"
 )
 
@@ -17,7 +17,7 @@ const sqliteConstraintUnique = 2067
 // auto-generated primary key and AddedAt is set to the current UTC time.
 // Returns an error if a feed with the same URL already exists (UNIQUE
 // constraint violation).
-func (s *SQLiteStore) AddFeed(ctx context.Context, feed *core.Feed) error {
+func (s *SQLiteStore) AddFeed(ctx context.Context, feed *model.Feed) error {
 	now := time.Now().UTC()
 	result, err := s.executor(ctx).ExecContext(ctx,
 		`INSERT INTO feeds (url, title, site_url, added_at, description, language, image_url, feed_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -27,9 +27,9 @@ func (s *SQLiteStore) AddFeed(ctx context.Context, feed *core.Feed) error {
 	if err != nil {
 		var sqliteErr *sqlite.Error
 		if errors.As(err, &sqliteErr) && sqliteErr.Code() == sqliteConstraintUnique {
-			return fmt.Errorf("feed %s: %w", feed.URL, core.ErrFeedAlreadyExists)
+			return fmt.Errorf("feed %s: %w", feed.URL, model.ErrFeedAlreadyExists)
 		}
-		return &core.StoreError{Op: "add", Table: "feeds", Err: err}
+		return &model.StoreError{Op: "add", Table: "feeds", Err: err}
 	}
 	id, err := result.LastInsertId()
 	if err != nil {
@@ -42,7 +42,7 @@ func (s *SQLiteStore) AddFeed(ctx context.Context, feed *core.Feed) error {
 
 // GetFeed retrieves a single feed by its primary key.
 // Returns a "scan feed" error wrapping sql.ErrNoRows if the ID does not exist.
-func (s *SQLiteStore) GetFeed(ctx context.Context, id int64) (*core.Feed, error) {
+func (s *SQLiteStore) GetFeed(ctx context.Context, id int64) (*model.Feed, error) {
 	row := s.executor(ctx).QueryRowContext(ctx,
 		`SELECT `+feedColumns+` FROM feeds WHERE id = ?`, id,
 	)
@@ -50,7 +50,7 @@ func (s *SQLiteStore) GetFeed(ctx context.Context, id int64) (*core.Feed, error)
 }
 
 // GetFeedByURL retrieves a single feed by its unique URL.
-func (s *SQLiteStore) GetFeedByURL(ctx context.Context, url string) (*core.Feed, error) {
+func (s *SQLiteStore) GetFeedByURL(ctx context.Context, url string) (*model.Feed, error) {
 	row := s.executor(ctx).QueryRowContext(ctx,
 		`SELECT `+feedColumns+` FROM feeds WHERE url = ?`, url,
 	)
@@ -59,19 +59,19 @@ func (s *SQLiteStore) GetFeedByURL(ctx context.Context, url string) (*core.Feed,
 
 // ListFeeds returns all registered feeds ordered by ascending ID.
 // Returns an empty (non-nil) slice if no feeds are registered.
-func (s *SQLiteStore) ListFeeds(ctx context.Context) ([]*core.Feed, error) {
+func (s *SQLiteStore) ListFeeds(ctx context.Context) ([]*model.Feed, error) {
 	rows, err := s.executor(ctx).QueryContext(ctx,
 		`SELECT `+feedColumns+` FROM feeds ORDER BY id`,
 	)
 	if err != nil {
-		return nil, &core.StoreError{Op: "list", Table: "feeds", Err: err}
+		return nil, &model.StoreError{Op: "list", Table: "feeds", Err: err}
 	}
 	return collectFeeds(rows)
 }
 
 // RemoveFeed deletes the feed with the given ID. Due to the ON DELETE CASCADE
 // constraint on the entries table, all entries belonging to this feed are also
-// deleted. Returns [core.ErrFeedNotFound] if no feed with that ID exists.
+// deleted. Returns [model.ErrFeedNotFound] if no feed with that ID exists.
 func (s *SQLiteStore) RemoveFeed(ctx context.Context, id int64) error {
 	result, err := s.executor(ctx).ExecContext(ctx, `DELETE FROM feeds WHERE id = ?`, id)
 	if err != nil {
@@ -82,7 +82,7 @@ func (s *SQLiteStore) RemoveFeed(ctx context.Context, id int64) error {
 		return fmt.Errorf("rows affected: %w", err)
 	}
 	if n == 0 {
-		return fmt.Errorf("feed %d: %w", id, core.ErrFeedNotFound)
+		return fmt.Errorf("feed %d: %w", id, model.ErrFeedNotFound)
 	}
 	return nil
 }
@@ -102,7 +102,7 @@ func (s *SQLiteStore) UpdateFeedFetchedAt(ctx context.Context, id int64) error {
 
 // UpdateFeed updates mutable feed fields. Only non-nil fields in the update
 // struct are applied.
-func (s *SQLiteStore) UpdateFeed(ctx context.Context, id int64, update core.FeedUpdate) error {
+func (s *SQLiteStore) UpdateFeed(ctx context.Context, id int64, update model.FeedUpdate) error {
 	var sets []string
 	var args []any
 
@@ -135,7 +135,7 @@ func (s *SQLiteStore) UpdateFeed(ctx context.Context, id int64, update core.Feed
 		return fmt.Errorf("rows affected: %w", err)
 	}
 	if n == 0 {
-		return fmt.Errorf("feed %d: %w", id, core.ErrFeedNotFound)
+		return fmt.Errorf("feed %d: %w", id, model.ErrFeedNotFound)
 	}
 	return nil
 }
@@ -155,12 +155,12 @@ func (s *SQLiteStore) UpdateFeedCacheHeaders(ctx context.Context, id int64, etag
 
 // ListDeadFeeds returns feeds that have at least one recorded fetch error.
 // Filtering is done in SQL to avoid loading all feeds into memory.
-func (s *SQLiteStore) ListDeadFeeds(ctx context.Context) ([]*core.Feed, error) {
+func (s *SQLiteStore) ListDeadFeeds(ctx context.Context) ([]*model.Feed, error) {
 	rows, err := s.executor(ctx).QueryContext(ctx,
 		`SELECT `+feedColumns+` FROM feeds WHERE error_count > 0 ORDER BY id`,
 	)
 	if err != nil {
-		return nil, &core.StoreError{Op: "list_dead", Table: "feeds", Err: err}
+		return nil, &model.StoreError{Op: "list_dead", Table: "feeds", Err: err}
 	}
 	return collectFeeds(rows)
 }

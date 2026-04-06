@@ -3,10 +3,12 @@ package core
 import (
 	"context"
 	"fmt"
+
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 // UpdateFeed modifies mutable fields of an existing feed.
-func (m *FeedManager) UpdateFeed(ctx context.Context, id int64, update FeedUpdate) error {
+func (m *FeedManager) UpdateFeed(ctx context.Context, id int64, update model.FeedUpdate) error {
 	if err := m.store.UpdateFeed(ctx, id, update); err != nil {
 		return fmt.Errorf("update feed %d: %w", id, err)
 	}
@@ -40,7 +42,7 @@ func (m *FeedManager) DisableFeed(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (s *Service) UpdateFeed(ctx context.Context, id int64, update FeedUpdate) error {
+func (s *Service) UpdateFeed(ctx context.Context, id int64, update model.FeedUpdate) error {
 	return s.feeds.UpdateFeed(ctx, id, update)
 }
 

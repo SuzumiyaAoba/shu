@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 func TestEntryMetadataHelpers(t *testing.T) {
@@ -79,7 +80,7 @@ func TestEntryMetadataHelpers(t *testing.T) {
 }
 
 func TestEntryMetadataHelpersEmptyValues(t *testing.T) {
-	entry := &core.Entry{}
+	entry := &model.Entry{}
 
 	categories, err := entry.ParseCategories()
 	if err != nil {
@@ -99,7 +100,7 @@ func TestEntryMetadataHelpersEmptyValues(t *testing.T) {
 }
 
 func TestEntryMetadataHelpersUseCache(t *testing.T) {
-	entry := &core.Entry{
+	entry := &model.Entry{
 		Categories: json.RawMessage(`[{"term":"go"}]`),
 		Source:     json.RawMessage(`{"title":"cached","id":"1","updated":"2026-01-01T00:00:00Z"}`),
 	}

@@ -5,15 +5,15 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 func TestTags(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed1 := &core.Feed{URL: "https://a.com/feed", Title: "A"}
-	feed2 := &core.Feed{URL: "https://b.com/feed", Title: "B"}
+	feed1 := &model.Feed{URL: "https://a.com/feed", Title: "A"}
+	feed2 := &model.Feed{URL: "https://b.com/feed", Title: "B"}
 	_ = s.AddFeed(ctx, feed1)
 	_ = s.AddFeed(ctx, feed2)
 
@@ -68,8 +68,8 @@ func TestListFeedTags(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed1 := &core.Feed{URL: "https://a.com/feed", Title: "A"}
-	feed2 := &core.Feed{URL: "https://b.com/feed", Title: "B"}
+	feed1 := &model.Feed{URL: "https://a.com/feed", Title: "A"}
+	feed2 := &model.Feed{URL: "https://b.com/feed", Title: "B"}
 	_ = s.AddFeed(ctx, feed1)
 	_ = s.AddFeed(ctx, feed2)
 
@@ -97,19 +97,19 @@ func TestListEntriesFilterByTag(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed1 := &core.Feed{URL: "https://a.com/feed", Title: "A"}
-	feed2 := &core.Feed{URL: "https://b.com/feed", Title: "B"}
+	feed1 := &model.Feed{URL: "https://a.com/feed", Title: "A"}
+	feed2 := &model.Feed{URL: "https://b.com/feed", Title: "B"}
 	_ = s.AddFeed(ctx, feed1)
 	_ = s.AddFeed(ctx, feed2)
 
-	_, _ = s.AddEntries(ctx, []*core.Entry{
+	_, _ = s.AddEntries(ctx, []*model.Entry{
 		{FeedID: feed1.ID, GUID: "a1", Title: "A1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed2.ID, GUID: "b1", Title: "B1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	})
 
 	_ = s.AddTag(ctx, feed1.ID, "tagged")
 
-	result, err := s.ListEntries(ctx, core.EntryFilter{Tag: "tagged", Limit: 10})
+	result, err := s.ListEntries(ctx, model.EntryFilter{Tag: "tagged", Limit: 10})
 	if err != nil {
 		t.Fatalf("ListEntries with tag filter failed: %v", err)
 	}

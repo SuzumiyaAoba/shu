@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 func TestListEntriesPage(t *testing.T) {
@@ -15,7 +16,7 @@ func TestListEntriesPage(t *testing.T) {
 	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
 	_, _ = svc.FetchFeed(ctx, feed.ID)
 
-	page, err := svc.ListEntriesPage(ctx, core.EntryFilter{Limit: 1, Offset: 0})
+	page, err := svc.ListEntriesPage(ctx, model.EntryFilter{Limit: 1, Offset: 0})
 	if err != nil {
 		t.Fatalf("ListEntriesPage failed: %v", err)
 	}

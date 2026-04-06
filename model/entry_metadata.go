@@ -1,4 +1,4 @@
-package core
+package model
 
 import (
 	"bytes"
@@ -45,16 +45,26 @@ type EntrySource struct {
 	Updated string `json:"updated"`
 }
 
-// cachedValue is a generic container for lazily-parsed, thread-safe cached data.
-type cachedValue[T any] struct {
+// EntryMetadataCache holds lazily-parsed, thread-safe cached metadata for an Entry.
+type EntryMetadataCache struct {
+	Categories   CachedValue[[]EntryCategory]
+	Enclosures   CachedValue[[]EntryEnclosure]
+	Authors      CachedValue[[]EntryPerson]
+	Links        CachedValue[[]EntryLink]
+	Contributors CachedValue[[]EntryPerson]
+	Source       CachedValue[*EntrySource]
+}
+
+// CachedValue is a generic container for lazily-parsed, thread-safe cached data.
+type CachedValue[T any] struct {
 	mu     sync.RWMutex
 	parsed bool
 	value  T
 	err    error
 }
 
-// getOrParse returns the cached value, computing it via parse on first access.
-func (c *cachedValue[T]) getOrParse(parse func() (T, error)) (T, error) {
+// GetOrParse returns the cached value, computing it via parse on first access.
+func (c *CachedValue[T]) GetOrParse(parse func() (T, error)) (T, error) {
 	c.mu.RLock()
 	if c.parsed {
 		defer c.mu.RUnlock()
@@ -76,43 +86,43 @@ func (c *cachedValue[T]) getOrParse(parse func() (T, error)) (T, error) {
 
 // ParseCategories decodes Categories into a typed slice.
 func (e *Entry) ParseCategories() ([]EntryCategory, error) {
-	return e.metadataCache.categories.getOrParse(func() ([]EntryCategory, error) {
-		return parseRawSlice[EntryCategory](e.Categories, "categories")
+	return e.metadataCache.Categories.GetOrParse(func() ([]EntryCategory, error) {
+		return ParseRawSlice[EntryCategory](e.Categories, "categories")
 	})
 }
 
 // ParseEnclosures decodes Enclosures into a typed slice.
 func (e *Entry) ParseEnclosures() ([]EntryEnclosure, error) {
-	return e.metadataCache.enclosures.getOrParse(func() ([]EntryEnclosure, error) {
-		return parseRawSlice[EntryEnclosure](e.Enclosures, "enclosures")
+	return e.metadataCache.Enclosures.GetOrParse(func() ([]EntryEnclosure, error) {
+		return ParseRawSlice[EntryEnclosure](e.Enclosures, "enclosures")
 	})
 }
 
 // ParseAuthors decodes Authors into a typed slice.
 func (e *Entry) ParseAuthors() ([]EntryPerson, error) {
-	return e.metadataCache.authors.getOrParse(func() ([]EntryPerson, error) {
-		return parseRawSlice[EntryPerson](e.Authors, "authors")
+	return e.metadataCache.Authors.GetOrParse(func() ([]EntryPerson, error) {
+		return ParseRawSlice[EntryPerson](e.Authors, "authors")
 	})
 }
 
 // ParseLinks decodes Links into a typed slice.
 func (e *Entry) ParseLinks() ([]EntryLink, error) {
-	return e.metadataCache.links.getOrParse(func() ([]EntryLink, error) {
-		return parseRawSlice[EntryLink](e.Links, "links")
+	return e.metadataCache.Links.GetOrParse(func() ([]EntryLink, error) {
+		return ParseRawSlice[EntryLink](e.Links, "links")
 	})
 }
 
 // ParseContributors decodes Contributors into a typed slice.
 func (e *Entry) ParseContributors() ([]EntryPerson, error) {
-	return e.metadataCache.contributors.getOrParse(func() ([]EntryPerson, error) {
-		return parseRawSlice[EntryPerson](e.Contributors, "contributors")
+	return e.metadataCache.Contributors.GetOrParse(func() ([]EntryPerson, error) {
+		return ParseRawSlice[EntryPerson](e.Contributors, "contributors")
 	})
 }
 
 // ParseSource decodes Source into a typed object.
 func (e *Entry) ParseSource() (*EntrySource, error) {
-	return e.metadataCache.source.getOrParse(func() (*EntrySource, error) {
-		if isEmptyRawMessage(e.Source) {
+	return e.metadataCache.Source.GetOrParse(func() (*EntrySource, error) {
+		if IsEmptyRawMessage(e.Source) {
 			return nil, nil
 		}
 		var source EntrySource
@@ -123,8 +133,9 @@ func (e *Entry) ParseSource() (*EntrySource, error) {
 	})
 }
 
-func parseRawSlice[T any](data json.RawMessage, field string) ([]T, error) {
-	if isEmptyRawMessage(data) {
+// ParseRawSlice parses a JSON-encoded array into a typed slice.
+func ParseRawSlice[T any](data json.RawMessage, field string) ([]T, error) {
+	if IsEmptyRawMessage(data) {
 		return []T{}, nil
 	}
 
@@ -138,7 +149,8 @@ func parseRawSlice[T any](data json.RawMessage, field string) ([]T, error) {
 	return values, nil
 }
 
-func isEmptyRawMessage(data json.RawMessage) bool {
+// IsEmptyRawMessage reports whether data is empty, whitespace-only, or "null".
+func IsEmptyRawMessage(data json.RawMessage) bool {
 	trimmed := bytes.TrimSpace(data)
 	return len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null"))
 }

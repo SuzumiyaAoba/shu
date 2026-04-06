@@ -1,6 +1,10 @@
 package core
 
-import "context"
+import (
+	"context"
+
+	"github.com/SuzumiyaAoba/shu/model"
+)
 
 // EntryQueries owns read-only entry lookup and search flows.
 type EntryQueries struct {
@@ -12,12 +16,12 @@ func NewEntryQueries(store EntryStore) *EntryQueries {
 	return &EntryQueries{store: store}
 }
 
-func buildEntryPage(entries []*Entry, total, offset, limit int) *EntryPage {
+func buildEntryPage(entries []*model.Entry, total, offset, limit int) *model.EntryPage {
 	if limit == 0 {
 		limit = len(entries)
 	}
 
-	return &EntryPage{
+	return &model.EntryPage{
 		Entries:    entries,
 		TotalCount: total,
 		Offset:     offset,
@@ -27,19 +31,19 @@ func buildEntryPage(entries []*Entry, total, offset, limit int) *EntryPage {
 }
 
 // GetEntry retrieves a single entry by its primary key.
-func (q *EntryQueries) GetEntry(ctx context.Context, id int64) (*Entry, error) {
+func (q *EntryQueries) GetEntry(ctx context.Context, id int64) (*model.Entry, error) {
 	return q.store.GetEntry(ctx, id)
 }
 
 // ListEntries retrieves stored entries matching the given filter criteria.
 // Results are ordered by fetched_at descending (newest first). It delegates
 // directly to the store without additional business logic.
-func (q *EntryQueries) ListEntries(ctx context.Context, filter EntryFilter) ([]*Entry, error) {
+func (q *EntryQueries) ListEntries(ctx context.Context, filter model.EntryFilter) ([]*model.Entry, error) {
 	return q.store.ListEntries(ctx, filter)
 }
 
 // ListEntriesPage returns entries plus pagination metadata for the given filter.
-func (q *EntryQueries) ListEntriesPage(ctx context.Context, filter EntryFilter) (*EntryPage, error) {
+func (q *EntryQueries) ListEntriesPage(ctx context.Context, filter model.EntryFilter) (*model.EntryPage, error) {
 	entries, err := q.store.ListEntries(ctx, filter)
 	if err != nil {
 		return nil, err
@@ -53,14 +57,14 @@ func (q *EntryQueries) ListEntriesPage(ctx context.Context, filter EntryFilter) 
 	return buildEntryPage(entries, total, filter.Offset, filter.Limit), nil
 }
 
-func (s *Service) GetEntry(ctx context.Context, id int64) (*Entry, error) {
+func (s *Service) GetEntry(ctx context.Context, id int64) (*model.Entry, error) {
 	return s.entries.GetEntry(ctx, id)
 }
 
-func (s *Service) ListEntries(ctx context.Context, filter EntryFilter) ([]*Entry, error) {
+func (s *Service) ListEntries(ctx context.Context, filter model.EntryFilter) ([]*model.Entry, error) {
 	return s.entries.ListEntries(ctx, filter)
 }
 
-func (s *Service) ListEntriesPage(ctx context.Context, filter EntryFilter) (*EntryPage, error) {
+func (s *Service) ListEntriesPage(ctx context.Context, filter model.EntryFilter) (*model.EntryPage, error) {
 	return s.entries.ListEntriesPage(ctx, filter)
 }

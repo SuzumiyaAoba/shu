@@ -1,23 +1,25 @@
-package core
+package fetch
 
 import (
 	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
+
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 type feedPersister interface {
-	persist(ctx context.Context, feed *Feed, document *fetchedFeedDocument) (*persistedFeedEntries, error)
+	persist(ctx context.Context, feed *model.Feed, document *fetchedDocument) (*persistedEntries, error)
 }
 
 type feedPersistStore interface {
-	AddEntries(ctx context.Context, entries []*Entry) (int, error)
-	UpdateFeed(ctx context.Context, id int64, update FeedUpdate) error
+	AddEntries(ctx context.Context, entries []*model.Entry) (int, error)
+	UpdateFeed(ctx context.Context, id int64, update model.FeedUpdate) error
 	UpdateFeedFetchedAt(ctx context.Context, id int64) error
 	ResetFeedError(ctx context.Context, id int64) error
 	UpdateFeedCacheHeaders(ctx context.Context, id int64, etag, lastModified string) error
-	TxRunner
+	RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
 type feedFetchedMarker interface {
@@ -33,19 +35,19 @@ type storeFeedPersister struct {
 	logger *slog.Logger
 }
 
-type persistedFeedEntries struct {
-	entries  []*Entry
+type persistedEntries struct {
+	entries  []*model.Entry
 	inserted int
 }
 
 func newStoreFeedPersister(store feedPersistStore, logger *slog.Logger) *storeFeedPersister {
 	return &storeFeedPersister{
 		store:  store,
-		logger: normalizeLogger(logger),
+		logger: ensureLogger(logger),
 	}
 }
 
-func (p *storeFeedPersister) persist(ctx context.Context, feed *Feed, document *fetchedFeedDocument) (*persistedFeedEntries, error) {
+func (p *storeFeedPersister) persist(ctx context.Context, feed *model.Feed, document *fetchedDocument) (*persistedEntries, error) {
 	logger := p.logger.With("feed_id", feed.ID, "feed_title", feed.Title)
 
 	// Cache headers are best-effort and do not need to be part of the transaction.
@@ -55,7 +57,7 @@ func (p *storeFeedPersister) persist(ctx context.Context, feed *Feed, document *
 	if document.finalURL != "" && document.finalURL != feed.URL {
 		logger.Info("feed URL redirected, updating", "old_url", feed.URL, "new_url", document.finalURL)
 		newURL := document.finalURL
-		if err := p.store.UpdateFeed(ctx, feed.ID, FeedUpdate{URL: &newURL}); err != nil {
+		if err := p.store.UpdateFeed(ctx, feed.ID, model.FeedUpdate{URL: &newURL}); err != nil {
 			logger.Warn("failed to update redirected feed URL", "error", err)
 		}
 	}
@@ -84,7 +86,7 @@ func (p *storeFeedPersister) persist(ctx context.Context, feed *Feed, document *
 	}
 
 	logger.Info("feed fetched", "new_entries", inserted)
-	return &persistedFeedEntries{entries: entries, inserted: inserted}, nil
+	return &persistedEntries{entries: entries, inserted: inserted}, nil
 }
 
 func markFeedFetched(ctx context.Context, store feedFetchedMarker, feedID int64) error {
@@ -100,21 +102,4 @@ func storeConditionalHeaders(ctx context.Context, store feedCacheHeaderStore, lo
 			logger.Warn("failed to update cache headers", "error", err)
 		}
 	}
-}
-
-func (f *Fetcher) resolveFetchedEntries(ctx context.Context, feed *Feed, result *persistedFeedEntries) ([]*Entry, int) {
-	if result.inserted == 0 {
-		return nil, 0
-	}
-	if result.inserted == len(result.entries) {
-		return result.entries, len(result.entries)
-	}
-
-	feedID := feed.ID
-	newEntries, err := f.store.ListEntries(ctx, EntryFilter{FeedID: &feedID, Limit: result.inserted})
-	if err != nil {
-		f.logger.Warn("failed to retrieve newly inserted entries", "id", feed.ID, "error", err)
-		return result.entries[:result.inserted], result.inserted
-	}
-	return newEntries, len(newEntries)
 }

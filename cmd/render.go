@@ -5,7 +5,7 @@ import (
 	"io"
 	"text/tabwriter"
 
-	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
@@ -78,9 +78,9 @@ func renderTableStyled[T any](w io.Writer, items []T, def tableDefinition[T]) er
 
 // --- Table definitions ---
 
-var feedTableDef = tableDefinition[*core.Feed]{
+var feedTableDef = tableDefinition[*model.Feed]{
 	headers: []string{"ID", "TITLE", "URL", "FETCHED", "STATUS"},
-	toRow: func(f *core.Feed) []string {
+	toRow: func(f *model.Feed) []string {
 		fetched := "-"
 		if f.FetchedAt != nil {
 			fetched = f.FetchedAt.Format("2006-01-02 15:04")
@@ -91,9 +91,9 @@ var feedTableDef = tableDefinition[*core.Feed]{
 	},
 }
 
-var entryTableDef = tableDefinition[*core.Entry]{
+var entryTableDef = tableDefinition[*model.Entry]{
 	headers: []string{"ID", "FEED", "TITLE", "LINK", "PUBLISHED"},
-	toRow: func(e *core.Entry) []string {
+	toRow: func(e *model.Entry) []string {
 		pub := "-"
 		if e.PublishedAt != nil {
 			pub = e.PublishedAt.Format("2006-01-02 15:04")
@@ -104,23 +104,23 @@ var entryTableDef = tableDefinition[*core.Entry]{
 	},
 }
 
-var entryLinkTableDef = tableDefinition[*core.Entry]{
+var entryLinkTableDef = tableDefinition[*model.Entry]{
 	headers: []string{"ID", "FEED", "TITLE", "LINK"},
-	toRow: func(e *core.Entry) []string {
+	toRow: func(e *model.Entry) []string {
 		return []string{fmt.Sprintf("%d", e.ID), fmt.Sprintf("%d", e.FeedID), e.Title, e.Link}
 	},
 }
 
-var tagTableDef = tableDefinition[core.Tag]{
+var tagTableDef = tableDefinition[model.Tag]{
 	headers: []string{"ID", "NAME"},
-	toRow: func(t core.Tag) []string {
+	toRow: func(t model.Tag) []string {
 		return []string{fmt.Sprintf("%d", t.ID), t.Name}
 	},
 }
 
-var feedStatsTableDef = tableDefinition[core.FeedStats]{
+var feedStatsTableDef = tableDefinition[model.FeedStats]{
 	headers: []string{"ID", "TITLE", "TOTAL", "UNREAD", "STARRED", "FETCHED", "STATUS"},
-	toRow: func(s core.FeedStats) []string {
+	toRow: func(s model.FeedStats) []string {
 		fetched := "-"
 		if s.FetchedAt != nil {
 			fetched = s.FetchedAt.Format("2006-01-02 15:04")
@@ -135,23 +135,23 @@ var feedStatsTableDef = tableDefinition[core.FeedStats]{
 
 // --- Public render functions ---
 
-func renderFeedsTable(w io.Writer, feeds []*core.Feed, noColor bool) error {
+func renderFeedsTable(w io.Writer, feeds []*model.Feed, noColor bool) error {
 	return renderTable(w, feeds, feedTableDef, noColor)
 }
 
-func renderEntriesTable(w io.Writer, entries []*core.Entry, noColor bool) error {
+func renderEntriesTable(w io.Writer, entries []*model.Entry, noColor bool) error {
 	return renderTable(w, entries, entryTableDef, noColor)
 }
 
-func renderEntryLinksTable(w io.Writer, entries []*core.Entry, noColor bool) error {
+func renderEntryLinksTable(w io.Writer, entries []*model.Entry, noColor bool) error {
 	return renderTable(w, entries, entryLinkTableDef, noColor)
 }
 
-func renderTagsTable(w io.Writer, tags []core.Tag, noColor bool) error {
+func renderTagsTable(w io.Writer, tags []model.Tag, noColor bool) error {
 	return renderTable(w, tags, tagTableDef, noColor)
 }
 
-func renderFeedStatsTable(w io.Writer, stats []core.FeedStats, noColor bool) error {
+func renderFeedStatsTable(w io.Writer, stats []model.FeedStats, noColor bool) error {
 	return renderTable(w, stats, feedStatsTableDef, noColor)
 }
 

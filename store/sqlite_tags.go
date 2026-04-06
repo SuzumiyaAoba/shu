@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 // AddTag creates a tag (if it doesn't exist) and associates it with a feed.
@@ -36,7 +36,7 @@ func (s *SQLiteStore) RemoveTag(ctx context.Context, feedID int64, tagName strin
 }
 
 // ListTags returns all tags associated with a given feed.
-func (s *SQLiteStore) ListTags(ctx context.Context, feedID int64) ([]core.Tag, error) {
+func (s *SQLiteStore) ListTags(ctx context.Context, feedID int64) ([]model.Tag, error) {
 	rows, err := s.executor(ctx).QueryContext(ctx,
 		`SELECT t.id, t.name FROM tags t JOIN feed_tags ft ON ft.tag_id = t.id WHERE ft.feed_id = ? ORDER BY t.name`,
 		feedID,
@@ -48,7 +48,7 @@ func (s *SQLiteStore) ListTags(ctx context.Context, feedID int64) ([]core.Tag, e
 }
 
 // ListAllTags returns every tag in the system.
-func (s *SQLiteStore) ListAllTags(ctx context.Context) ([]core.Tag, error) {
+func (s *SQLiteStore) ListAllTags(ctx context.Context) ([]model.Tag, error) {
 	rows, err := s.executor(ctx).QueryContext(ctx, `SELECT id, name FROM tags ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list all tags: %w", err)
@@ -57,7 +57,7 @@ func (s *SQLiteStore) ListAllTags(ctx context.Context) ([]core.Tag, error) {
 }
 
 // ListFeedTags returns every feed-tag association grouped by feed ID.
-func (s *SQLiteStore) ListFeedTags(ctx context.Context) (map[int64][]core.Tag, error) {
+func (s *SQLiteStore) ListFeedTags(ctx context.Context) (map[int64][]model.Tag, error) {
 	rows, err := s.executor(ctx).QueryContext(ctx, `
 		SELECT ft.feed_id, t.id, t.name
 		FROM feed_tags ft
@@ -69,10 +69,10 @@ func (s *SQLiteStore) ListFeedTags(ctx context.Context) (map[int64][]core.Tag, e
 	}
 	defer func() { _ = rows.Close() }()
 
-	feedTags := make(map[int64][]core.Tag)
+	feedTags := make(map[int64][]model.Tag)
 	for rows.Next() {
 		var feedID int64
-		var tag core.Tag
+		var tag model.Tag
 		if err := rows.Scan(&feedID, &tag.ID, &tag.Name); err != nil {
 			return nil, fmt.Errorf("scan feed tag: %w", err)
 		}
@@ -82,7 +82,7 @@ func (s *SQLiteStore) ListFeedTags(ctx context.Context) (map[int64][]core.Tag, e
 }
 
 // ListFeedsByTag returns all feeds associated with the given tag name.
-func (s *SQLiteStore) ListFeedsByTag(ctx context.Context, tagName string) ([]*core.Feed, error) {
+func (s *SQLiteStore) ListFeedsByTag(ctx context.Context, tagName string) ([]*model.Feed, error) {
 	rows, err := s.executor(ctx).QueryContext(ctx,
 		`SELECT `+feedColumns+` FROM feeds WHERE id IN (SELECT ft.feed_id FROM feed_tags ft JOIN tags t ON t.id = ft.tag_id WHERE t.name = ?) ORDER BY id`,
 		tagName,

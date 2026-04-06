@@ -1,4 +1,8 @@
-package core
+// Package model defines the shared domain types for the shu RSS aggregator.
+//
+// These types are used across all layers (core, store, cmd) and are kept in
+// a dedicated package to avoid circular dependencies between layers.
+package model
 
 import (
 	"encoding/json"
@@ -129,7 +133,7 @@ type Entry struct {
 	// It is nil if the entry has not been starred.
 	StarredAt *time.Time `json:"starred_at"`
 
-	metadataCache entryMetadataCache `json:"-"`
+	metadataCache EntryMetadataCache `json:"-"`
 }
 
 // EntryFilter specifies criteria for querying stored entries.
@@ -193,13 +197,4 @@ type FeedStats struct {
 	ErrorCount   int        `json:"error_count"`
 	LastError    string     `json:"last_error"`
 	Disabled     bool       `json:"disabled"`
-}
-
-type entryMetadataCache struct {
-	categories   cachedValue[[]EntryCategory]
-	enclosures   cachedValue[[]EntryEnclosure]
-	authors      cachedValue[[]EntryPerson]
-	links        cachedValue[[]EntryLink]
-	contributors cachedValue[[]EntryPerson]
-	source       cachedValue[*EntrySource]
 }

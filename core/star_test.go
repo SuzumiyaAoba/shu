@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 func TestStarEntries(t *testing.T) {
@@ -25,7 +26,7 @@ func TestStarEntries(t *testing.T) {
 	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
 	_, _ = svc.FetchFeed(ctx, feed.ID)
 
-	entries, _ := svc.ListEntries(ctx, core.EntryFilter{Limit: 10})
+	entries, _ := svc.ListEntries(ctx, model.EntryFilter{Limit: 10})
 	if len(entries) < 2 {
 		t.Fatal("expected at least 2 entries")
 	}
@@ -35,7 +36,7 @@ func TestStarEntries(t *testing.T) {
 		t.Fatalf("StarEntries failed: %v", err)
 	}
 
-	starred, _ := svc.ListEntries(ctx, core.EntryFilter{Limit: 10, StarredOnly: true})
+	starred, _ := svc.ListEntries(ctx, model.EntryFilter{Limit: 10, StarredOnly: true})
 	if len(starred) != 2 {
 		t.Errorf("got %d starred, want 2", len(starred))
 	}
@@ -44,7 +45,7 @@ func TestStarEntries(t *testing.T) {
 		t.Fatalf("UnstarEntries failed: %v", err)
 	}
 
-	starred, _ = svc.ListEntries(ctx, core.EntryFilter{Limit: 10, StarredOnly: true})
+	starred, _ = svc.ListEntries(ctx, model.EntryFilter{Limit: 10, StarredOnly: true})
 	if len(starred) != 0 {
 		t.Errorf("got %d starred, want 0", len(starred))
 	}

@@ -7,7 +7,7 @@ import (
 	"iter"
 	"time"
 
-	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 // feedColumns is the SELECT column list shared by GetFeed and ListFeeds.
@@ -53,8 +53,8 @@ type scanner interface {
 
 // scanFeed reads a single feed row from the scanner and converts the stored
 // ISO 8601 timestamp strings back into Go time.Time values.
-func scanFeed(s scanner) (*core.Feed, error) {
-	var f core.Feed
+func scanFeed(s scanner) (*model.Feed, error) {
+	var f model.Feed
 	var addedAt string
 	var fetchedAt *string
 
@@ -86,8 +86,8 @@ func scanFeed(s scanner) (*core.Feed, error) {
 // scanEntry reads a single entry row from the scanner and converts the stored
 // ISO 8601 timestamp strings back into Go time.Time values. The published_at
 // and updated_at columns are nullable and map to *time.Time.
-func scanEntry(s scanner) (*core.Entry, error) {
-	var e core.Entry
+func scanEntry(s scanner) (*model.Entry, error) {
+	var e model.Entry
 	var publishedAt *string
 	var fetchedAt string
 	var updatedAt *string
@@ -135,22 +135,22 @@ func scanEntry(s scanner) (*core.Entry, error) {
 	return &e, nil
 }
 
-func fetchFeed(s scanner, label string) (*core.Feed, error) {
+func fetchFeed(s scanner, label string) (*model.Feed, error) {
 	feed, err := scanFeed(s)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%s: %w", label, core.ErrFeedNotFound)
+			return nil, fmt.Errorf("%s: %w", label, model.ErrFeedNotFound)
 		}
 		return nil, err
 	}
 	return feed, nil
 }
 
-func fetchEntry(s scanner, label string) (*core.Entry, error) {
+func fetchEntry(s scanner, label string) (*model.Entry, error) {
 	entry, err := scanEntry(s)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%s: %w", label, core.ErrEntryNotFound)
+			return nil, fmt.Errorf("%s: %w", label, model.ErrEntryNotFound)
 		}
 		return nil, err
 	}
@@ -215,11 +215,11 @@ func collectValues[T any](rows *sql.Rows, scan func(scanner) (T, error)) ([]T, e
 	return result, rows.Err()
 }
 
-func collectFeeds(rows *sql.Rows) ([]*core.Feed, error) {
+func collectFeeds(rows *sql.Rows) ([]*model.Feed, error) {
 	return collectRows(rows, scanFeed)
 }
 
-func collectEntries(rows *sql.Rows) ([]*core.Entry, error) {
+func collectEntries(rows *sql.Rows) ([]*model.Entry, error) {
 	return collectRows(rows, scanEntry)
 }
 
@@ -230,14 +230,14 @@ func toNilIfEmpty(s string) []byte {
 	return []byte(s)
 }
 
-func scanTag(s scanner) (core.Tag, error) {
-	var t core.Tag
+func scanTag(s scanner) (model.Tag, error) {
+	var t model.Tag
 	if err := s.Scan(&t.ID, &t.Name); err != nil {
-		return core.Tag{}, fmt.Errorf("scan tag: %w", err)
+		return model.Tag{}, fmt.Errorf("scan tag: %w", err)
 	}
 	return t, nil
 }
 
-func collectTags(rows *sql.Rows) ([]core.Tag, error) {
+func collectTags(rows *sql.Rows) ([]model.Tag, error) {
 	return collectValues(rows, scanTag)
 }
