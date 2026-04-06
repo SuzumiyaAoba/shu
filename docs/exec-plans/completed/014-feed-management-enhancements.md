@@ -2,38 +2,38 @@
 
 ## Overview
 
-フィード管理の実用性を向上させる機能追加。HTTP リダイレクト時の URL 自動更新、
-エントリの日付範囲フィルタリング、フィード発見のフォールバック戦略を実装する。
+Enhance feed management functionality with HTTP redirect URL auto-update,
+entry date range filtering, and feed discovery fallback strategies.
 
 ---
 
-## Proposal 1: HTTP 301 リダイレクト時のフィード URL 自動更新
+## Proposal 1: Automatic Feed URL Update on HTTP 301 Redirect
 
-### 現状の問題
+### Current Problem
 
-フィード提供元が URL を変更して 301 (Moved Permanently) を返した場合、
-`go-retryablehttp` はリダイレクト先を自動的にフォローする。しかし、データベース上の
-フィード URL は古いままとなり、毎回リダイレクトが発生する。
+When a feed provider changes the URL and returns 301 (Moved Permanently),
+`go-retryablehttp` automatically follows the redirect. However, the feed URL
+in the database remains old, causing a redirect on every fetch.
 
-一部のフィードサーバーはリダイレクトを恒久的に提供し続けるが、将来的に古い URL が
-削除される可能性がある。
+Some feed servers provide redirects indefinitely, but there is a risk that
+the old URL will be deleted in the future.
 
-### 提案する変更
+### Proposed Changes
 
-`fetch_download.go` でレスポンスの最終 URL を追跡し、301 リダイレクト時に
-フィード URL を自動更新する:
+Track the final response URL in `fetch_download.go` and auto-update the feed
+URL on 301 redirect:
 
 ```go
 type fetchedFeedDocument struct {
     body       []byte
     headers    http.Header
-    finalURL   string // リダイレクト後の最終URL
-    redirected bool   // 301リダイレクトがあったか
+    finalURL   string // Final URL after redirect
+    redirected bool   // Whether a 301 redirect occurred
 }
 ```
 
-`fetchBodyConditional` を修正して、レスポンスの `Request.URL` (リダイレクト後の
-最終 URL) を返すようにする:
+Modify `fetchBodyConditional` to return the response's `Request.URL` (final URL
+after redirect):
 
 ```go
 func fetchBodyConditional(ctx context.Context, client *http.Client, url, etag, lastModified string) ([]byte, http.Header, string, error) {
@@ -43,7 +43,7 @@ func fetchBodyConditional(ctx context.Context, client *http.Client, url, etag, l
 }
 ```
 
-persist 時に URL が変わっていたらログ出力し、store の `UpdateFeed` で URL を更新:
+On persist, log URL changes and update via store's `UpdateFeed`:
 
 ```go
 if document.redirected && document.finalURL != feed.URL {
@@ -54,49 +54,49 @@ if document.redirected && document.finalURL != feed.URL {
 }
 ```
 
-### 注意点
+### Implementation Notes
 
-- 301 のみ処理する (302/307 は一時的リダイレクトのため無視)
-- `CheckRedirect` でリダイレクトチェーンを確認し、301 のみを判定
-- URL 変更はベストエフォート (失敗してもフェッチ自体は成功とする)
-- 重複チェック: リダイレクト先の URL が既に別のフィードとして登録されていた場合はスキップ
+- Only process 301 redirects (ignore 302/307 as temporary)
+- Use `CheckRedirect` to verify redirect chain and detect 301 only
+- URL update is best-effort (fetch succeeds even if update fails)
+- Deduplication: skip if the redirect target URL already exists as another feed
 
-### 影響範囲
+### Affected Files
 
-| ファイル | 変更 |
-|----------|------|
-| `core/fetch_download.go` | `fetchBodyConditional` の戻り値に最終 URL を追加、リダイレクト検出 |
-| `core/fetch_persist.go` | リダイレクト検出時の URL 更新ロジック |
-| `core/fetch_download_test.go` | 301 リダイレクト時の URL 更新テスト |
+| File | Change |
+|------|--------|
+| `core/fetch_download.go` | Add final URL to `fetchBodyConditional` return values and detect redirects |
+| `core/fetch_persist.go` | Add URL update logic on redirect detection |
+| `core/fetch_download_test.go` | Add test for URL update on 301 redirect |
 
-### 工数: Medium (2–3時間)
+### Effort: Medium (2–3 hours)
 
 ---
 
-## Proposal 2: エントリの日付範囲フィルタリング
+## Proposal 2: Entry Date Range Filtering
 
-### 現状の問題
+### Current Problem
 
-`core/model.go` の `EntryFilter` は `FeedID`, `UnreadOnly`, `StarredOnly`, `Tag` での
-フィルタリングに対応しているが、日付範囲 (`--published-after`, `--published-before`)
-によるフィルタリングがない。
+The `EntryFilter` in `core/model.go` supports filtering by `FeedID`, `UnreadOnly`,
+`StarredOnly`, and `Tag`, but lacks date range filtering
+(`--published-after`, `--published-before`).
 
-ユーザーが「今週の記事だけ見たい」「先月のスター記事を確認したい」といった
-時系列ベースの操作を行えない。
+Users cannot perform time-series operations like "show me this week's articles"
+or "check my starred articles from last month".
 
-### 提案する変更
+### Proposed Changes
 
-`EntryFilter` に日付範囲フィールドを追加:
+Add date range fields to `EntryFilter`:
 
 ```go
 type EntryFilter struct {
-    // ... 既存フィールド
+    // ... existing fields
     PublishedAfter  *time.Time `json:"published_after"`
     PublishedBefore *time.Time `json:"published_before"`
 }
 ```
 
-`store/sqlite_entries.go` の `newEntryFilterQuery` にフィルタ条件を追加:
+Add filter conditions to `newEntryFilterQuery` in `store/sqlite_entries.go`:
 
 ```go
 if filter.PublishedAfter != nil {
@@ -107,42 +107,43 @@ if filter.PublishedBefore != nil {
 }
 ```
 
-CLI フラグを追加:
+Add CLI flags:
 
 ```go
 entriesCmd.Flags().StringVar(&publishedAfter, "published-after", "", "filter entries published after this date (YYYY-MM-DD)")
 entriesCmd.Flags().StringVar(&publishedBefore, "published-before", "", "filter entries published before this date (YYYY-MM-DD)")
 ```
 
-### 影響範囲
+### Affected Files
 
-| ファイル | 変更 |
-|----------|------|
-| `core/model.go` | `EntryFilter` に `PublishedAfter`/`PublishedBefore` 追加 |
-| `store/sqlite_entries.go` | `newEntryFilterQuery` に日付条件追加 |
-| `cmd/entry_commands.go` | `entries` コマンドに `--published-after`/`--published-before` フラグ追加 |
-| `store/sqlite_entries_test.go` | 日付範囲フィルタのテスト追加 |
+| File | Change |
+|------|--------|
+| `core/model.go` | Add `PublishedAfter`/`PublishedBefore` to `EntryFilter` |
+| `store/sqlite_entries.go` | Add date conditions to `newEntryFilterQuery` |
+| `cmd/entry_commands.go` | Add `--published-after`/`--published-before` flags to `entries` command |
+| `store/sqlite_entries_test.go` | Add date range filter tests |
 
-### 工数: Small (1–2時間)
+### Effort: Small (1–2 hours)
 
 ---
 
-## Proposal 3: フィード発見のフォールバック戦略
+## Proposal 3: Feed Discovery Fallback Strategy
 
-### 現状の問題
+### Current Problem
 
-`core/discover.go` の `DiscoverFeeds` は HTML ページの
-`<link rel="alternate">` タグのみを解析する。多くのサイトではこのタグが存在するが、
-一部のサイト (特に静的サイトジェネレータ) では適切なタグがない。
+`DiscoverFeeds` in `core/discover.go` only parses `<link rel="alternate">`
+tags in HTML pages. While many sites have this tag, some (especially those
+using static site generators) do not.
 
-### 提案する変更
+### Proposed Changes
 
-`<link rel="alternate">` で見つからなかった場合のフォールバック戦略を追加:
+Add fallback strategies when no `<link rel="alternate">` is found:
 
-1. **既知のパスを探索**: 一般的なフィードパス (`/feed`, `/feed.xml`, `/rss`,
-   `/rss.xml`, `/atom.xml`, `/index.xml`, `/feed/atom`, `/feed/rss`) を HEAD リクエストで確認
-2. **JSON Feed の検出**: `application/feed+json` の `<link>` 検出 (既存) に加え、
-   `/.well-known/feed` パスも確認
+1. **Explore Common Paths**: Check for common feed paths (`/feed`, `/feed.xml`,
+   `/rss`, `/rss.xml`, `/atom.xml`, `/index.xml`, `/feed/atom`, `/feed/rss`)
+   with HEAD requests
+2. **Detect JSON Feeds**: In addition to existing `application/feed+json`
+   `<link>` detection, also check `/.well-known/feed` path
 
 ```go
 var commonFeedPaths = []string{
@@ -180,39 +181,39 @@ func (d *FeedDiscovery) isFeedURL(ctx context.Context, url string) bool {
 }
 ```
 
-### 注意点
+### Implementation Notes
 
-- フォールバック探索は `<link>` 解析で結果がなかった場合のみ実行
-- HEAD リクエストを使い、ボディのダウンロードを避ける
-- Content-Type が明示されていないサーバーへの対応として、2xx レスポンスの場合に
-  GET で先頭数バイトを読んで XML/JSON かどうかを判定するオプション追加も検討
-- 並行リクエストで高速化 (既知パスが多いため、直列だと遅い)
+- Run fallback discovery only if `<link>` parsing returns no results
+- Use HEAD requests to avoid downloading body
+- For servers without explicit Content-Type, consider GET-first few bytes
+  to detect XML/JSON as an optional enhancement
+- Parallelize common path checks (many paths to check, sequential would be slow)
 
-### 影響範囲
+### Affected Files
 
-| ファイル | 変更 |
-|----------|------|
-| `core/discover.go` | `discoverByCommonPaths` メソッド追加、`DiscoverFeeds` からフォールバック呼び出し |
-| `core/discover_test.go` | フォールバック発見のテスト追加 |
+| File | Change |
+|------|--------|
+| `core/discover.go` | Add `discoverByCommonPaths` method and invoke as fallback from `DiscoverFeeds` |
+| `core/discover_test.go` | Add fallback discovery tests |
 
-### 工数: Medium (2–3時間)
+### Effort: Medium (2–3 hours)
 
 ---
 
-## Proposal 4: per-feed fetch interval の CLI 公開
+## Proposal 4: Expose per-feed fetch interval via CLI
 
-### 現状の問題
+### Current Problem
 
-`core/model.go:55` に `FetchIntervalSec` フィールドが既に存在し、
-`fetch_batch.go:56-61` で per-feed インターバルのスキップロジックも実装済みだが、
-CLI からこの値を設定する手段がない。
+The `FetchIntervalSec` field exists in `core/model.go:55` and per-feed
+interval skip logic is already implemented in `fetch_batch.go:56-61`,
+but there's no CLI way to set this value.
 
-`core/model.go:166-169` の `FeedUpdate` には `Title` と `URL` しかなく、
-`FetchIntervalSec` が含まれていない。
+The `FeedUpdate` in `core/model.go:166-169` only includes `Title` and `URL`,
+not `FetchIntervalSec`.
 
-### 提案する変更
+### Proposed Changes
 
-1. `FeedUpdate` に `FetchIntervalSec` を追加:
+1. Add `FetchIntervalSec` to `FeedUpdate`:
 
 ```go
 type FeedUpdate struct {
@@ -222,50 +223,50 @@ type FeedUpdate struct {
 }
 ```
 
-2. `store/sqlite_feed.go` の `UpdateFeed` に対応カラムを追加
+2. Update `UpdateFeed` in `store/sqlite_feed.go` to handle the new column
 
-3. `cmd/feed_commands.go` の `update` コマンドにフラグ追加:
+3. Add flag to `update` command in `cmd/feed_commands.go`:
 
 ```go
 updateCmd.Flags().DurationVar(&fetchInterval, "fetch-interval", 0,
     "per-feed fetch interval (e.g. 1h, 30m); 0 uses global default")
 ```
 
-### 影響範囲
+### Affected Files
 
-| ファイル | 変更 |
-|----------|------|
-| `core/model.go` | `FeedUpdate` に `FetchIntervalSec` 追加 |
-| `store/sqlite_feed.go` | `UpdateFeed` で `FetchIntervalSec` カラム更新対応 |
-| `cmd/feed_commands.go` | `update` コマンドに `--fetch-interval` フラグ追加 |
-| `store/sqlite_feed_test.go` | `UpdateFeed` のテスト追加 |
+| File | Change |
+|------|--------|
+| `core/model.go` | Add `FetchIntervalSec` to `FeedUpdate` |
+| `store/sqlite_feed.go` | Update `UpdateFeed` to handle `FetchIntervalSec` column |
+| `cmd/feed_commands.go` | Add `--fetch-interval` flag to `update` command |
+| `store/sqlite_feed_test.go` | Add test for `UpdateFeed` with interval |
 
-### 工数: Small (1時間)
+### Effort: Small (1 hour)
 
 ---
 
 ## Priority Matrix
 
-| Proposal | 影響 | 工数 | 推奨優先度 |
-|----------|------|------|-----------|
-| 4. per-feed interval CLI 公開 | Medium (既存ロジック活用) | Small | **High** — 既存機能の UI 欠落 |
-| 2. 日付範囲フィルタ | Medium (UX 向上) | Small | **High** |
-| 1. 301 リダイレクト URL 更新 | Medium (運用効率) | Medium | Medium |
-| 3. フィード発見フォールバック | Medium (発見率向上) | Medium | Low — nice to have |
+| Proposal | Impact | Effort | Recommended Priority |
+|----------|--------|--------|----------------------|
+| 4. Expose per-feed interval CLI | Medium (reuse existing logic) | Small | **High** — Missing UI for existing feature |
+| 2. Date range filtering | Medium (UX improvement) | Small | **High** |
+| 1. Auto-update 301 redirect URL | Medium (operational efficiency) | Medium | Medium |
+| 3. Feed discovery fallback | Medium (improve discovery rate) | Medium | Low — nice to have |
 
-## 推奨実行順序
+## Recommended Execution Order
 
-### Phase 1: 既存機能の補完 (2–3時間)
-1. Proposal 4 — per-feed interval CLI 公開
-2. Proposal 2 — 日付範囲フィルタ
+### Phase 1: Complete Existing Features (2–3 hours)
+1. Proposal 4 — Expose per-feed interval CLI
+2. Proposal 2 — Date range filtering
 
-### Phase 2: フィード管理の改善 (4–6時間)
-3. Proposal 1 — 301 リダイレクト URL 更新
-4. Proposal 3 — フィード発見フォールバック
+### Phase 2: Enhance Feed Management (4–6 hours)
+3. Proposal 1 — Auto-update 301 redirect URL
+4. Proposal 3 — Feed discovery fallback
 
-## 完了条件
+## Completion Criteria
 
-- [ ] 全既存テストがパス
-- [ ] 各 Proposal に対応するテスト追加
-- [ ] `golangci-lint run` クリーン
-- [ ] CLI ヘルプメッセージの整合性確認
+- [ ] All existing tests pass
+- [ ] Add tests for each Proposal
+- [ ] `golangci-lint run` clean
+- [ ] CLI help messages are consistent
