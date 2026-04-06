@@ -2,25 +2,23 @@
 
 ## Overview
 
-フィード並行取得のワーカーにおけるパニックリカバリ、マイグレーションの
-context 伝搬、エラースライスの事前確保を改善し、並行処理の堅牢性を高める。
+Improve panic recovery in feed fetch workers, context propagation in migrations, and pre-allocation of error slices to increase the robustness of concurrent processing.
 
 ---
 
-## Proposal 1: フェッチワーカーのパニックリカバリ
+## Proposal 1: Panic Recovery in Fetch Workers
 
-### 現状の問題
+### Current Issue
 
-`core/fetch_batch.go:73-99` のワーカーゴルーチンに `recover()` がない。
-もしワーカー内でパニックが発生すると、`wg.Done()` が呼ばれず `wg.Wait()` が
-永遠にブロックする (デッドロック)。
+The worker goroutine in `core/fetch_batch.go:73-99` lacks `recover()`.
+If a panic occurs within a worker, `wg.Done()` is not called and `wg.Wait()` blocks forever (deadlock).
 
-現状のコードでは gofeed パーサや HTTP 処理内でパニックが起きる可能性は低いが、
-外部ライブラリのバグやメモリ不足時のランタイムパニックに対する防御がない。
+While panics from the gofeed parser or HTTP processing are unlikely in current code,
+there is no defense against bugs in external libraries or runtime panics from out-of-memory conditions.
 
-### 提案する変更
+### Proposed Change
 
-ワーカー関数内に `recover` を追加し、パニックを通常のエラーに変換する:
+Add `recover` inside the worker function to convert panics to normal errors:
 
 ```go
 worker := func() {
@@ -32,37 +30,36 @@ worker := func() {
             errMu.Unlock()
         }
     }()
-    // ... 既存のワーカーロジック
+    // ... existing worker logic
 }
 ```
 
-### 影響範囲
+### Impact Scope
 
-| ファイル | 変更 |
-|----------|------|
-| `core/fetch_batch.go` | ワーカー関数に `recover()` を追加 |
-| `core/fetch_batch_test.go` | パニックリカバリのテスト追加 |
+| File | Change |
+|------|--------|
+| `core/fetch_batch.go` | Add `recover()` to worker function |
+| `core/fetch_batch_test.go` | Add test for panic recovery |
 
-### 工数: Tiny (30分)
+### Effort: Tiny (30 minutes)
 
 ---
 
-## Proposal 2: マイグレーションの Context 伝搬
+## Proposal 2: Context Propagation in Migrations
 
-### 現状の問題
+### Current Issue
 
-`store/sqlite_migrations.go:44` で `context.Background()` を使用している:
+`store/sqlite_migrations.go:44` uses `context.Background()`:
 
 ```go
 if _, err := provider.Up(context.Background()); err != nil {
 ```
 
-これにより、マイグレーション実行中にアプリケーションがシャットダウンしても
-マイグレーションをキャンセルできない。
+This means migrations cannot be canceled even if the application shuts down during migration execution.
 
-### 提案する変更
+### Proposed Change
 
-`runMigrations` にコンテキストを渡すシグネチャに変更する:
+Modify the `runMigrations` signature to accept a context:
 
 ```go
 func (s *SQLiteStore) runMigrations(ctx context.Context) error {
@@ -70,34 +67,34 @@ func (s *SQLiteStore) runMigrations(ctx context.Context) error {
     if _, err := provider.Up(ctx); err != nil {
 ```
 
-呼び出し元の `NewSQLiteStore` / `NewSQLiteStoreWithOptions` にも context を追加する。
+Also add context to the calling functions `NewSQLiteStore` and `NewSQLiteStoreWithOptions`.
 
-### 注意点
+### Notes
 
-- `NewSQLiteStore` のシグネチャ変更は破壊的変更
-- `cmd/root.go` の `PersistentPreRunE` から context を渡せるため、実質的な変更は小さい
-- goose の `provider.Up` は context.Context を受け取るため、API 上の制約はない
+- Changing `NewSQLiteStore` signature is a breaking change
+- Since context can be passed from `cmd/root.go`'s `PersistentPreRunE`, the actual change is minimal
+- goose's `provider.Up` accepts context.Context, so there are no API constraints
 
-### 影響範囲
+### Impact Scope
 
-| ファイル | 変更 |
-|----------|------|
-| `store/sqlite.go` | `NewSQLiteStore` / `NewSQLiteStoreWithOptions` に `context.Context` パラメータ追加 |
-| `store/sqlite_migrations.go` | `runMigrations(ctx)` に変更 |
-| `store/sqlite_test.go` | テストヘルパー更新 |
-| `app/app.go` | `StoreOpener` 型に context を追加 |
-| `cmd/root.go` | context を渡すよう更新 |
+| File | Change |
+|------|--------|
+| `store/sqlite.go` | Add `context.Context` parameter to `NewSQLiteStore` and `NewSQLiteStoreWithOptions` |
+| `store/sqlite_migrations.go` | Change to `runMigrations(ctx)` |
+| `store/sqlite_test.go` | Update test helpers |
+| `app/app.go` | Add context to `StoreOpener` type |
+| `cmd/root.go` | Update to pass context |
 
-### 工数: Small (1–2時間)
+### Effort: Small (1–2 hours)
 
 ---
 
-## Proposal 3: フェッチエラースライスの事前確保
+## Proposal 3: Pre-allocate Fetch Error Slice
 
-### 現状の問題
+### Current Issue
 
-`core/fetch_batch.go:70` で `fetchErrs` が nil スライスとして宣言され、
-エラー発生時に `append` で逐次拡張される:
+`fetchErrs` is declared as a nil slice in `core/fetch_batch.go:70`,
+and is extended incrementally with `append` when errors occur:
 
 ```go
 var (
@@ -105,44 +102,44 @@ var (
 )
 ```
 
-多数のフィード (1000+) でエラーが多発した場合、スライスの再配置が頻繁に発生する。
+When many feeds (1000+) produce frequent errors, slice reallocations happen frequently.
 
-### 提案する変更
+### Proposed Change
 
 ```go
 fetchErrs := make([]error, 0, min(len(feeds), 64))
 ```
 
-上限 64 をキャップとして事前確保する。実際にエラーが少ない場合のメモリ浪費を抑えつつ、
-中程度のエラー数に対するアロケーションを削減する。
+Pre-allocate with a cap of 64. This reduces memory waste when errors are few
+and reduces allocations for moderate error counts.
 
-### 影響範囲
+### Impact Scope
 
-| ファイル | 変更 |
-|----------|------|
-| `core/fetch_batch.go` | `fetchErrs` の宣言を事前確保に変更 |
+| File | Change |
+|------|--------|
+| `core/fetch_batch.go` | Change `fetchErrs` declaration to pre-allocated |
 
-### 工数: Tiny (10分)
+### Effort: Tiny (10 minutes)
 
 ---
 
 ## Priority Matrix
 
-| Proposal | 影響 | 工数 | 推奨優先度 |
-|----------|------|------|-----------|
-| 1. パニックリカバリ | High (デッドロック防止) | Tiny | **High** |
-| 3. エラースライス事前確保 | Low (パフォーマンス) | Tiny | **High** — 1行変更 |
-| 2. マイグレーション context | Medium (graceful shutdown) | Small | Medium — 破壊的変更あり |
+| Proposal | Impact | Effort | Recommended Priority |
+|----------|--------|--------|----------------------|
+| 1. Panic recovery | High (prevent deadlock) | Tiny | **High** |
+| 3. Pre-allocate error slice | Low (performance) | Tiny | **High** — Single-line change |
+| 2. Migration context | Medium (graceful shutdown) | Small | Medium — Has breaking changes |
 
-## 推奨実行順序
+## Recommended Execution Order
 
-1. Proposal 3 — エラースライス事前確保 (10分)
-2. Proposal 1 — パニックリカバリ (30分)
-3. Proposal 2 — マイグレーション context 伝搬 (1–2時間)
+1. Proposal 3 — Pre-allocate error slice (10 minutes)
+2. Proposal 1 — Panic recovery (30 minutes)
+3. Proposal 2 — Context propagation in migrations (1–2 hours)
 
-## 完了条件
+## Completion Checklist
 
-- [ ] 全既存テストがパス
-- [ ] Proposal 1: パニック発生時にデッドロックしないことを確認するテスト追加
-- [ ] Proposal 2: context キャンセル時にマイグレーションが中断されることを確認
-- [ ] `go vet ./...` および `golangci-lint run` クリーン
+- [ ] All existing tests pass
+- [ ] Proposal 1: Add test confirming no deadlock on panic
+- [ ] Proposal 2: Confirm migration cancels when context is canceled
+- [ ] `go vet ./...` and `golangci-lint run` clean

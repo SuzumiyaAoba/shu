@@ -2,28 +2,28 @@
 
 ## Overview
 
-コードベースの監査で発見されたセキュリティリスクを修正する。SQL インジェクション経路、
-SSRF リスク、コマンドインジェクション、ファイルパーミッション問題を対象とする。
+Fix security risks discovered in the code audit. Address SQL injection pathways,
+SSRF risks, command injection, and file permission issues.
 
 ---
 
-## Proposal 1: `buildEntriesColumnUpdate` のカラム名ホワイトリスト
+## Proposal 1: Column Name Whitelist for `buildEntriesColumnUpdate`
 
-### 現状の問題
+### Current Issue
 
-`store/sqlite_entry_state.go:19` の `buildEntriesColumnUpdate` は `column` パラメータを
-SQL 文字列に直接埋め込んでいる:
+The `buildEntriesColumnUpdate` function at `store/sqlite_entry_state.go:19` embeds the `column` parameter
+directly into the SQL string:
 
 ```go
 return fmt.Sprintf(`UPDATE entries SET %s = NULL WHERE id IN (%s)`, column, placeholders), args
 ```
 
-現在この関数の呼び出し元はすべて内部コード（`"read_at"`, `"starred_at"` のみ）だが、
-将来新しい呼び出し元が追加された場合にSQLインジェクション経路となりうる。
+Currently all callers are internal code (only `"read_at"` and `"starred_at"`), but
+this could become a SQL injection pathway if new callers are added in the future.
 
-### 提案する変更
+### Proposed Change
 
-カラム名をホワイトリストで検証するガードを追加する:
+Add a guard that validates column names against a whitelist:
 
 ```go
 var validEntryStateColumns = map[string]bool{
@@ -35,35 +35,35 @@ func buildEntriesColumnUpdate(column string, value any, ids []int64) (string, []
     if !validEntryStateColumns[column] {
         return "", nil, fmt.Errorf("invalid column for entry state update: %q", column)
     }
-    // ... 既存ロジック
+    // ... existing logic
 }
 ```
 
-### 影響範囲
+### Impact Scope
 
-| ファイル | 変更 |
-|----------|------|
-| `store/sqlite_entry_state.go` | ホワイトリスト検証を追加、戻り値に error を追加 |
+| File | Change |
+|------|--------|
+| `store/sqlite_entry_state.go` | Add whitelist validation, add error to return value |
 
-### 工数: Tiny (30分)
+### Effort: Tiny (30 minutes)
 
 ---
 
-## Proposal 2: Feed URL の入力バリデーション (SSRF 防止)
+## Proposal 2: Feed URL Input Validation (Prevent SSRF)
 
-### 現状の問題
+### Current Issue
 
-`core/feed.go:51` の `AddFeed` と `core/discover.go:30` の `DiscoverFeeds` は
-任意の URL をそのまま HTTP リクエストする。プライベート IP 範囲
-(127.0.0.1, 10.x.x.x, 192.168.x.x, 169.254.x.x) や危険なスキーム
-(`file://`, `javascript:`) に対するバリデーションがない。
+`AddFeed` at `core/feed.go:51` and `DiscoverFeeds` at `core/discover.go:30`
+make HTTP requests with arbitrary URLs without validation for private IP ranges
+(127.0.0.1, 10.x.x.x, 192.168.x.x, 169.254.x.x) or dangerous schemes
+(`file://`, `javascript:`).
 
-CLI ツールとしてはリスクは低いが、将来的に Web サービスとして公開された場合に
-SSRF 脆弱性となる。
+As a CLI tool, the risk is low, but this could become an SSRF vulnerability
+if the service is published as a web service in the future.
 
-### 提案する変更
+### Proposed Change
 
-`core/` に URL バリデーション関数を追加し、`AddFeed`・`DiscoverFeeds` の入口で呼ぶ:
+Add a URL validation function to `core/` and call it at the entry of `AddFeed` and `DiscoverFeeds`:
 
 ```go
 // core/url_validate.go
@@ -86,29 +86,29 @@ func validateFeedURL(rawURL string) error {
 }
 ```
 
-### 注意点
+### Notes
 
-- `--allow-private` フラグで開発用途のローカルフィード（localhost 上の RSS）を許可できるようにする
-- 既存のフィードで localhost を使っているケースを壊さないよう、バリデーションは `AddFeed` のみに適用し、`FetchFeed` には適用しない
+- Allow local feeds (RSS on localhost) for development purposes via `--allow-private` flag
+- Apply validation only to `AddFeed`, not to `FetchFeed`, to avoid breaking existing feeds using localhost
 
-### 影響範囲
+### Impact Scope
 
-| ファイル | 変更 |
-|----------|------|
-| `core/url_validate.go` | 新規: URL バリデーション関数 |
-| `core/url_validate_test.go` | 新規: テスト |
-| `core/feed.go` | `AddFeed` の先頭で `validateFeedURL` を呼ぶ |
-| `core/discover.go` | `DiscoverFeeds` の先頭で `validateFeedURL` を呼ぶ |
+| File | Change |
+|------|--------|
+| `core/url_validate.go` | New: URL validation function |
+| `core/url_validate_test.go` | New: Tests |
+| `core/feed.go` | Call `validateFeedURL` at start of `AddFeed` |
+| `core/discover.go` | Call `validateFeedURL` at start of `DiscoverFeeds` |
 
-### 工数: Small (1–2時間)
+### Effort: Small (1–2 hours)
 
 ---
 
-## Proposal 3: `openBrowser` のコマンドインジェクション防止
+## Proposal 3: Prevent Command Injection in `openBrowser`
 
-### 現状の問題
+### Current Issue
 
-`cmd/entry_commands.go:255-266` の `openBrowser` は URL を `exec.Command` に渡している:
+The `openBrowser` function at `cmd/entry_commands.go:255-266` passes the URL to `exec.Command`:
 
 ```go
 func openBrowser(url string) error {
@@ -120,23 +120,22 @@ func openBrowser(url string) error {
 }
 ```
 
-URL はデータベースから取得されたものなので直接的なユーザー入力ではないが、
-フィードに悪意のある URL が含まれていた場合、シェルメタ文字が解釈される可能性がある。
+While the URL comes from the database (not direct user input), shell metacharacters could be
+interpreted if a feed contains a malicious URL.
 
-`exec.Command` は直接的なシェル呼び出しではないため実際のリスクは低い
-（Go の `exec.Command` は argv 渡しでシェル経由しない）。ただし Windows の
-`cmd /c start` パスはシェル経由であり、URL 中の `&` 等が解釈される。
+The actual risk is low since `exec.Command` does not invoke a shell directly (Go's `exec.Command` uses argv passing).
+However, the Windows path `cmd /c start` does invoke a shell, where characters like `&` in the URL could be interpreted.
 
-### 提案する変更
+### Proposed Change
 
-Windows パスのみ修正が必要:
+Only the Windows path needs fixing:
 
 ```go
 case "windows":
     return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 ```
 
-また、URL が `http://` または `https://` で始まることを確認するガードを追加:
+Also add a guard to confirm the URL starts with `http://` or `https://`:
 
 ```go
 func openBrowser(rawURL string) error {
@@ -148,63 +147,62 @@ func openBrowser(rawURL string) error {
 }
 ```
 
-### 影響範囲
+### Impact Scope
 
-| ファイル | 変更 |
-|----------|------|
-| `cmd/entry_commands.go` | `openBrowser` にスキーム検証を追加、Windows パスを `rundll32` に変更 |
+| File | Change |
+|------|--------|
+| `cmd/entry_commands.go` | Add scheme validation to `openBrowser`, change Windows path to `rundll32` |
 
-### 工数: Tiny (30分)
+### Effort: Tiny (30 minutes)
 
 ---
 
-## Proposal 4: データベースディレクトリのパーミッション修正
+## Proposal 4: Fix Database Directory Permissions
 
-### 現状の問題
+### Current Issue
 
-`app/app.go:102` でデータベースディレクトリを `0o755` (全ユーザー読み取り可能) で作成:
+The database directory is created with permissions `0o755` (world-readable) at `app/app.go:102`:
 
 ```go
 if err := os.MkdirAll(dir, 0o755); err != nil {
 ```
 
-RSS リーダーのデータベースには購読情報が含まれるため、他ユーザーから読み取れる
-べきではない。
+Since the RSS reader database contains subscription information, it should not be readable by other users.
 
-### 提案する変更
+### Proposed Change
 
 ```go
 if err := os.MkdirAll(dir, 0o700); err != nil {
 ```
 
-### 影響範囲
+### Impact Scope
 
-| ファイル | 変更 |
-|----------|------|
-| `app/app.go` | ディレクトリパーミッションを `0o755` → `0o700` に変更 |
+| File | Change |
+|------|--------|
+| `app/app.go` | Change directory permissions from `0o755` to `0o700` |
 
-### 工数: Tiny (5分)
+### Effort: Tiny (5 minutes)
 
 ---
 
 ## Priority Matrix
 
-| Proposal | リスク | 工数 | 推奨優先度 |
-|----------|--------|------|-----------|
-| 1. カラムホワイトリスト | Low (内部コードのみ) | Tiny | **High** — 防御的プログラミング |
-| 4. DB ディレクトリ権限 | Low | Tiny | **High** — 1行変更 |
-| 3. openBrowser スキーム検証 | Low | Tiny | **High** — Windows パス修正 |
-| 2. URL バリデーション | Medium (将来のSSRF) | Small | Medium — CLI ではリスク低 |
+| Proposal | Risk | Effort | Recommended Priority |
+|----------|------|--------|----------------------|
+| 1. Column whitelist | Low (internal code only) | Tiny | **High** — Defensive programming |
+| 4. DB directory permissions | Low | Tiny | **High** — Single-line change |
+| 3. openBrowser scheme validation | Low | Tiny | **High** — Fix Windows path |
+| 2. URL validation | Medium (future SSRF) | Small | Medium — Low risk as CLI tool |
 
-## 推奨実行順序
+## Recommended Execution Order
 
-1. Proposal 4 — DB ディレクトリ権限 (5分)
-2. Proposal 1 — カラムホワイトリスト (30分)
-3. Proposal 3 — openBrowser スキーム検証 (30分)
-4. Proposal 2 — URL バリデーション (1–2時間)
+1. Proposal 4 — DB directory permissions (5 minutes)
+2. Proposal 1 — Column whitelist (30 minutes)
+3. Proposal 3 — openBrowser scheme validation (30 minutes)
+4. Proposal 2 — URL validation (1–2 hours)
 
-## 完了条件
+## Completion Checklist
 
-- [ ] 全既存テストがパス
-- [ ] 新規テスト追加 (特に Proposal 2)
-- [ ] `golangci-lint run` クリーン
+- [ ] All existing tests pass
+- [ ] New tests added (especially Proposal 2)
+- [ ] `golangci-lint run` clean
