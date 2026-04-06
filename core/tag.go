@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 // TagManager owns tag CRUD and feed-tag associations.
@@ -36,22 +38,22 @@ func (m *TagManager) RemoveTag(ctx context.Context, feedID int64, tagName string
 }
 
 // ListTags returns all tags for a feed.
-func (m *TagManager) ListTags(ctx context.Context, feedID int64) ([]Tag, error) {
+func (m *TagManager) ListTags(ctx context.Context, feedID int64) ([]model.Tag, error) {
 	return m.store.ListTags(ctx, feedID)
 }
 
 // ListAllTags returns every tag in the system.
-func (m *TagManager) ListAllTags(ctx context.Context) ([]Tag, error) {
+func (m *TagManager) ListAllTags(ctx context.Context) ([]model.Tag, error) {
 	return m.store.ListAllTags(ctx)
 }
 
 // ListFeedTags returns all feed-tag associations keyed by feed ID.
-func (m *TagManager) ListFeedTags(ctx context.Context) (map[int64][]Tag, error) {
+func (m *TagManager) ListFeedTags(ctx context.Context) (map[int64][]model.Tag, error) {
 	return m.store.ListFeedTags(ctx)
 }
 
 // ListFeedsByTag returns all feeds with the given tag.
-func (m *TagManager) ListFeedsByTag(ctx context.Context, tagName string) ([]*Feed, error) {
+func (m *TagManager) ListFeedsByTag(ctx context.Context, tagName string) ([]*model.Feed, error) {
 	return m.store.ListFeedsByTag(ctx, tagName)
 }
 
@@ -63,18 +65,18 @@ func (s *Service) RemoveTag(ctx context.Context, feedID int64, tagName string) e
 	return s.tags.RemoveTag(ctx, feedID, tagName)
 }
 
-func (s *Service) ListTags(ctx context.Context, feedID int64) ([]Tag, error) {
+func (s *Service) ListTags(ctx context.Context, feedID int64) ([]model.Tag, error) {
 	return s.tags.ListTags(ctx, feedID)
 }
 
-func (s *Service) ListAllTags(ctx context.Context) ([]Tag, error) {
+func (s *Service) ListAllTags(ctx context.Context) ([]model.Tag, error) {
 	return s.tags.ListAllTags(ctx)
 }
 
-func (s *Service) ListFeedTags(ctx context.Context) (map[int64][]Tag, error) {
+func (s *Service) ListFeedTags(ctx context.Context) (map[int64][]model.Tag, error) {
 	return s.tags.ListFeedTags(ctx)
 }
 
-func (s *Service) ListFeedsByTag(ctx context.Context, tagName string) ([]*Feed, error) {
+func (s *Service) ListFeedsByTag(ctx context.Context, tagName string) ([]*model.Feed, error) {
 	return s.tags.ListFeedsByTag(ctx, tagName)
 }

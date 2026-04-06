@@ -1,4 +1,4 @@
-package core
+package fetch
 
 import (
 	"context"
@@ -7,9 +7,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
-const fetchWorkerCount = 10
+const workerCount = 10
 
 // FetchAll fetches every registered feed concurrently (up to 10 at a time) and
 // returns the total number of new entries stored across all feeds.
@@ -26,26 +28,26 @@ func (f *Fetcher) FetchAll(ctx context.Context) (int, error) {
 
 // FetchAllWithObserver fetches all eligible feeds while emitting structured
 // progress events to observer.
-func (f *Fetcher) FetchAllWithObserver(ctx context.Context, observer FetchObserver) (int, error) {
+func (f *Fetcher) FetchAllWithObserver(ctx context.Context, observer Observer) (int, error) {
 	feeds, err := f.store.ListFeeds(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("list feeds: %w", err)
 	}
 
-	notifier := newFetchNotifier(observer)
-	toFetch := filterFeedsForFetch(feeds, notifier, time.Now())
+	n := newNotifier(observer)
+	toFetch := filterFeedsForFetch(feeds, n, time.Now())
 	if len(toFetch) == 0 {
 		return 0, nil
 	}
 
-	return f.fetchFeedsConcurrently(ctx, toFetch, notifier)
+	return f.fetchFeedsConcurrently(ctx, toFetch, n)
 }
 
-func filterFeedsForFetch(feeds []*Feed, notifier *fetchNotifier, now time.Time) []*Feed {
-	toFetch := make([]*Feed, 0, len(feeds))
+func filterFeedsForFetch(feeds []*model.Feed, n *notifier, now time.Time) []*model.Feed {
+	toFetch := make([]*model.Feed, 0, len(feeds))
 	for _, feed := range feeds {
 		if shouldSkipFeedInterval(feed, now) {
-			notifier.skipped(feed, FetchSkipInterval)
+			n.skipped(feed.ID, feed.Title, feed.URL, SkipInterval)
 			continue
 		}
 		toFetch = append(toFetch, feed)
@@ -53,16 +55,16 @@ func filterFeedsForFetch(feeds []*Feed, notifier *fetchNotifier, now time.Time) 
 	return toFetch
 }
 
-func shouldSkipFeedInterval(feed *Feed, now time.Time) bool {
+func shouldSkipFeedInterval(feed *model.Feed, now time.Time) bool {
 	if feed.FetchIntervalSec <= 0 || feed.FetchedAt == nil {
 		return false
 	}
 	return now.Sub(*feed.FetchedAt) < time.Duration(feed.FetchIntervalSec)*time.Second
 }
 
-func (f *Fetcher) fetchFeedsConcurrently(ctx context.Context, feeds []*Feed, notifier *fetchNotifier) (int, error) {
-	jobs := make(chan *Feed)
-	workers := min(fetchWorkerCount, len(feeds))
+func (f *Fetcher) fetchFeedsConcurrently(ctx context.Context, feeds []*model.Feed, n *notifier) (int, error) {
+	jobs := make(chan *model.Feed)
+	workers := min(workerCount, len(feeds))
 	var (
 		total     atomic.Int64
 		wg        sync.WaitGroup
@@ -89,7 +91,7 @@ func (f *Fetcher) fetchFeedsConcurrently(ctx context.Context, feeds []*Feed, not
 					return
 				}
 
-				entries, err := f.fetchFeed(ctx, feed, notifier)
+				entries, err := f.fetchFeed(ctx, feed, n)
 				if err != nil {
 					if ctx.Err() != nil {
 						return
@@ -128,12 +130,4 @@ func (f *Fetcher) fetchFeedsConcurrently(ctx context.Context, feeds []*Feed, not
 	}
 
 	return int(total.Load()), errors.Join(fetchErrs...)
-}
-
-func (s *Service) FetchAll(ctx context.Context) (int, error) {
-	return s.fetcher.FetchAll(ctx)
-}
-
-func (s *Service) FetchAllWithObserver(ctx context.Context, observer FetchObserver) (int, error) {
-	return s.fetcher.FetchAllWithObserver(ctx, observer)
 }

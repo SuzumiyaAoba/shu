@@ -10,6 +10,8 @@ import (
 	"maps"
 	"slices"
 	"time"
+
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 // OPML represents an OPML 2.0 document for feed import/export.
@@ -56,8 +58,8 @@ type OPMLOutline struct {
 }
 
 type opmlFeedAdder interface {
-	AddFeed(ctx context.Context, url string, titleOverride string) (*Feed, error)
-	AddFeedDirect(ctx context.Context, feed *Feed) error
+	AddFeed(ctx context.Context, url string, titleOverride string) (*model.Feed, error)
+	AddFeedDirect(ctx context.Context, feed *model.Feed) error
 }
 
 type opmlTagAdder interface {
@@ -97,7 +99,7 @@ func (h *OPMLHandler) ExportOPML(ctx context.Context) (*OPML, error) {
 		return nil, fmt.Errorf("list feed tags: %w", err)
 	}
 
-	taggedFeeds := make(map[string][]*Feed)
+	taggedFeeds := make(map[string][]*model.Feed)
 	for _, f := range feeds {
 		for _, tag := range feedTags[f.ID] {
 			taggedFeeds[tag.Name] = append(taggedFeeds[tag.Name], f)
@@ -134,7 +136,7 @@ func (h *OPMLHandler) ExportOPML(ctx context.Context) (*OPML, error) {
 	return opml, nil
 }
 
-func feedToOutline(f *Feed) OPMLOutline {
+func feedToOutline(f *model.Feed) OPMLOutline {
 	return OPMLOutline{
 		Text:    f.Title,
 		Title:   f.Title,
@@ -174,7 +176,7 @@ func (h *OPMLHandler) ImportOPMLDetailed(ctx context.Context, r io.Reader) (*OPM
 func decodeOPML(r io.Reader) (*OPML, error) {
 	var opml OPML
 	if err := xml.NewDecoder(r).Decode(&opml); err != nil {
-		return nil, fmt.Errorf("%w: parse OPML: %v", ErrInvalidOPML, err)
+		return nil, fmt.Errorf("%w: parse OPML: %v", model.ErrInvalidOPML, err)
 	}
 	return &opml, nil
 }
@@ -244,8 +246,8 @@ func (i *opmlImporter) importOutline(ctx context.Context, outline OPMLOutline, p
 	return added, nil
 }
 
-func (i *opmlImporter) ensureFeed(ctx context.Context, url, title string) (*Feed, int, error) {
-	feed := &Feed{URL: url, Title: title}
+func (i *opmlImporter) ensureFeed(ctx context.Context, url, title string) (*model.Feed, int, error) {
+	feed := &model.Feed{URL: url, Title: title}
 	err := i.handler.feeds.AddFeedDirect(ctx, feed)
 	if err == nil {
 		if i.result != nil {
@@ -254,7 +256,7 @@ func (i *opmlImporter) ensureFeed(ctx context.Context, url, title string) (*Feed
 		return feed, 1, nil
 	}
 
-	if errors.Is(err, ErrFeedAlreadyExists) {
+	if errors.Is(err, model.ErrFeedAlreadyExists) {
 		i.handler.logger.Info("reuse duplicate OPML feed", "url", url)
 		if i.result != nil {
 			i.result.ReusedCount++
@@ -280,7 +282,7 @@ func (i *opmlImporter) ensureFeed(ctx context.Context, url, title string) (*Feed
 func (i *opmlImporter) applyTags(ctx context.Context, feedID int64, feedURL string, tags []string) error {
 	for _, tag := range tags {
 		if err := i.handler.tags.AddTag(ctx, feedID, tag); err != nil {
-			tagErr := fmt.Errorf("%w: tag OPML feed %s with %q: %v", ErrTagApplyFailed, feedURL, tag, err)
+			tagErr := fmt.Errorf("%w: tag OPML feed %s with %q: %v", model.ErrTagApplyFailed, feedURL, tag, err)
 			if i.result != nil {
 				i.result.Issues = append(i.result.Issues, OPMLImportIssue{
 					URL:   feedURL,

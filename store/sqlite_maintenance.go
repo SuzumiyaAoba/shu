@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 // FeedStats returns aggregate statistics for all feeds.
-func (s *SQLiteStore) FeedStats(ctx context.Context) ([]core.FeedStats, error) {
+func (s *SQLiteStore) FeedStats(ctx context.Context) ([]model.FeedStats, error) {
 	rows, err := s.executor(ctx).QueryContext(ctx, `
 		SELECT
 			f.id, f.title, f.url,
@@ -27,7 +27,7 @@ func (s *SQLiteStore) FeedStats(ctx context.Context) ([]core.FeedStats, error) {
 	}
 	defer func() { _ = rows.Close() }()
 
-	var stats []core.FeedStats
+	var stats []model.FeedStats
 	for rows.Next() {
 		st, err := scanFeedStats(rows)
 		if err != nil {
@@ -52,8 +52,8 @@ func (s *SQLiteStore) CleanupEntries(ctx context.Context, olderThan time.Time) (
 	return int(n), nil
 }
 
-func scanFeedStats(s scanner) (core.FeedStats, error) {
-	var stats core.FeedStats
+func scanFeedStats(s scanner) (model.FeedStats, error) {
+	var stats model.FeedStats
 	var fetchedAt *string
 	var disabled int
 
@@ -62,12 +62,12 @@ func scanFeedStats(s scanner) (core.FeedStats, error) {
 		&stats.TotalCount, &stats.UnreadCount, &stats.StarredCount,
 		&fetchedAt, &stats.ErrorCount, &stats.LastError, &disabled,
 	); err != nil {
-		return core.FeedStats{}, fmt.Errorf("scan feed stats: %w", err)
+		return model.FeedStats{}, fmt.Errorf("scan feed stats: %w", err)
 	}
 
 	var err error
 	if stats.FetchedAt, err = parseNullableTime(fetchedAt, "fetched_at"); err != nil {
-		return core.FeedStats{}, err
+		return model.FeedStats{}, err
 	}
 	stats.Disabled = disabled != 0
 

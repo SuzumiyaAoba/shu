@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/SuzumiyaAoba/shu/core/fetch"
 	"golang.org/x/net/html"
 )
 
@@ -33,7 +34,7 @@ func (d *FeedDiscovery) DiscoverFeeds(ctx context.Context, pageURL string) ([]st
 		return nil, fmt.Errorf("validate page URL: %w", err)
 	}
 
-	body, _, _, err := fetchBodyConditional(ctx, d.client, pageURL, "", "")
+	body, _, _, err := fetch.FetchBodyConditional(ctx, d.client, pageURL, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("fetch page %s: %w", pageURL, err)
 	}

@@ -1,4 +1,4 @@
-package core
+package fetch
 
 import (
 	"context"
@@ -6,10 +6,12 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 type feedDownloader interface {
-	download(ctx context.Context, feed *Feed) (*fetchedFeedDocument, bool, error)
+	download(ctx context.Context, feed *model.Feed) (*fetchedDocument, bool, error)
 }
 
 type feedDownloadStore interface {
@@ -23,7 +25,7 @@ type httpFeedDownloader struct {
 	logger *slog.Logger
 }
 
-type fetchedFeedDocument struct {
+type fetchedDocument struct {
 	body     []byte
 	headers  http.Header
 	finalURL string // URL after following redirects
@@ -31,14 +33,14 @@ type fetchedFeedDocument struct {
 
 func newHTTPFeedDownloader(store feedDownloadStore, logger *slog.Logger, client *http.Client) *httpFeedDownloader {
 	return &httpFeedDownloader{
-		client: normalizeHTTPClient(client),
+		client: ensureHTTPClient(client),
 		store:  store,
-		logger: normalizeLogger(logger),
+		logger: ensureLogger(logger),
 	}
 }
 
 func (d *httpFeedDownloader) setHTTPClient(client *http.Client) {
-	d.client = normalizeHTTPClient(client)
+	d.client = ensureHTTPClient(client)
 }
 
 // maxFeedBodySize is the upper bound for a downloaded feed document. Feeds
@@ -46,10 +48,10 @@ func (d *httpFeedDownloader) setHTTPClient(client *http.Client) {
 // exhausting available memory.
 const maxFeedBodySize = 10 << 20 // 10 MiB
 
-// fetchBodyConditional downloads the feed document with optional conditional
+// FetchBodyConditional downloads a feed document with optional conditional
 // GET headers (If-None-Match, If-Modified-Since). Returns nil body on 304.
 // The returned finalURL is the URL after following any redirects.
-func fetchBodyConditional(ctx context.Context, client *http.Client, url, etag, lastModified string) ([]byte, http.Header, string, error) {
+func FetchBodyConditional(ctx context.Context, client *http.Client, url, etag, lastModified string) ([]byte, http.Header, string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("create request: %w", err)
@@ -87,10 +89,10 @@ func fetchBodyConditional(ctx context.Context, client *http.Client, url, etag, l
 	return body, resp.Header, finalURL, nil
 }
 
-func (d *httpFeedDownloader) download(ctx context.Context, feed *Feed) (*fetchedFeedDocument, bool, error) {
-	body, headers, finalURL, err := fetchBodyConditional(ctx, d.client, feed.URL, feed.ETag, feed.LastModified)
+func (d *httpFeedDownloader) download(ctx context.Context, feed *model.Feed) (*fetchedDocument, bool, error) {
+	body, headers, finalURL, err := FetchBodyConditional(ctx, d.client, feed.URL, feed.ETag, feed.LastModified)
 	if err != nil {
-		return nil, false, d.handleFeedDownloadError(ctx, feed, err)
+		return nil, false, d.handleDownloadError(ctx, feed, err)
 	}
 	if body == nil {
 		if err := markFeedFetched(ctx, d.store, feed.ID); err != nil {
@@ -98,11 +100,11 @@ func (d *httpFeedDownloader) download(ctx context.Context, feed *Feed) (*fetched
 		}
 		return nil, true, nil
 	}
-	return &fetchedFeedDocument{body: body, headers: headers, finalURL: finalURL}, false, nil
+	return &fetchedDocument{body: body, headers: headers, finalURL: finalURL}, false, nil
 }
 
-func (d *httpFeedDownloader) handleFeedDownloadError(ctx context.Context, feed *Feed, err error) error {
-	fetchErr := &FeedError{FeedID: feed.ID, FeedURL: feed.URL, Op: "fetch", Err: err}
+func (d *httpFeedDownloader) handleDownloadError(ctx context.Context, feed *model.Feed, err error) error {
+	fetchErr := &model.FeedError{FeedID: feed.ID, FeedURL: feed.URL, Op: "fetch", Err: err}
 	if ctx.Err() != nil {
 		return fetchErr
 	}

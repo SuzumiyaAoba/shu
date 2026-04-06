@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -16,11 +16,11 @@ func TestAddEntries(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	feed := &model.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
 	_ = s.AddFeed(ctx, feed)
 
 	now := time.Now()
-	entries := []*core.Entry{
+	entries := []*model.Entry{
 		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1", Link: "https://example.com/1", PublishedAt: &now, Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed.ID, GUID: "guid-2", Title: "Entry 2", Link: "https://example.com/2", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	}
@@ -38,12 +38,12 @@ func TestAddEntriesExpandedFields(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	feed := &model.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
 	_ = s.AddFeed(ctx, feed)
 
 	now := time.Now()
 	updated := now.Add(time.Hour)
-	entries := []*core.Entry{
+	entries := []*model.Entry{
 		{
 			FeedID:       feed.ID,
 			GUID:         "guid-full",
@@ -74,7 +74,7 @@ func TestAddEntriesExpandedFields(t *testing.T) {
 	}
 
 	feedID := feed.ID
-	result, err := s.ListEntries(ctx, core.EntryFilter{FeedID: &feedID, Limit: 10})
+	result, err := s.ListEntries(ctx, model.EntryFilter{FeedID: &feedID, Limit: 10})
 	if err != nil {
 		t.Fatalf("ListEntries failed: %v", err)
 	}
@@ -87,8 +87,8 @@ func TestAddEntriesExpandedFields(t *testing.T) {
 	// Timestamps are stored as UTC in SQLite, so we exclude them from the diff
 	// and check non-nil separately.
 	if diff := cmp.Diff(want, e,
-		cmpopts.IgnoreFields(core.Entry{}, "ID", "FetchedAt", "ReadAt", "StarredAt", "PublishedAt", "UpdatedAt"),
-		cmpopts.IgnoreUnexported(core.Entry{}),
+		cmpopts.IgnoreFields(model.Entry{}, "ID", "FetchedAt", "ReadAt", "StarredAt", "PublishedAt", "UpdatedAt"),
+		cmpopts.IgnoreUnexported(model.Entry{}),
 	); diff != "" {
 		t.Errorf("entry mismatch (-want +got):\n%s", diff)
 	}
@@ -104,15 +104,15 @@ func TestAddEntriesDeduplication(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	feed := &model.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
 	_ = s.AddFeed(ctx, feed)
 
-	entries := []*core.Entry{
+	entries := []*model.Entry{
 		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	}
 	_, _ = s.AddEntries(ctx, entries)
 
-	dupes := []*core.Entry{
+	dupes := []*model.Entry{
 		{FeedID: feed.ID, GUID: "guid-1", Title: "Entry 1 Updated", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed.ID, GUID: "guid-2", Title: "Entry 2", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	}
@@ -142,17 +142,17 @@ func TestListEntries(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	feed := &model.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
 	_ = s.AddFeed(ctx, feed)
 
-	entries := []*core.Entry{
+	entries := []*model.Entry{
 		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed.ID, GUID: "2", Title: "Entry 2", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed.ID, GUID: "3", Title: "Entry 3", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	}
 	_, _ = s.AddEntries(ctx, entries)
 
-	result, err := s.ListEntries(ctx, core.EntryFilter{Limit: 2})
+	result, err := s.ListEntries(ctx, model.EntryFilter{Limit: 2})
 	if err != nil {
 		t.Fatalf("ListEntries failed: %v", err)
 	}
@@ -165,19 +165,19 @@ func TestListEntriesFilterByFeed(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed1 := &core.Feed{URL: "https://a.com/feed", Title: "A"}
-	feed2 := &core.Feed{URL: "https://b.com/feed", Title: "B"}
+	feed1 := &model.Feed{URL: "https://a.com/feed", Title: "A"}
+	feed2 := &model.Feed{URL: "https://b.com/feed", Title: "B"}
 	_ = s.AddFeed(ctx, feed1)
 	_ = s.AddFeed(ctx, feed2)
 
-	_, _ = s.AddEntries(ctx, []*core.Entry{
+	_, _ = s.AddEntries(ctx, []*model.Entry{
 		{FeedID: feed1.ID, GUID: "a1", Title: "A1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed1.ID, GUID: "a2", Title: "A2", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed2.ID, GUID: "b1", Title: "B1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	})
 
 	feedID := feed1.ID
-	result, err := s.ListEntries(ctx, core.EntryFilter{FeedID: &feedID, Limit: 10})
+	result, err := s.ListEntries(ctx, model.EntryFilter{FeedID: &feedID, Limit: 10})
 	if err != nil {
 		t.Fatalf("ListEntries failed: %v", err)
 	}
@@ -190,10 +190,10 @@ func TestSearchEntries(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	feed := &model.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
 	_ = s.AddFeed(ctx, feed)
 
-	_, _ = s.AddEntries(ctx, []*core.Entry{
+	_, _ = s.AddEntries(ctx, []*model.Entry{
 		{FeedID: feed.ID, GUID: "1", Title: "Golang Tutorial", Summary: "Learn Go", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed.ID, GUID: "2", Title: "Python Guide", Summary: "Learn Python", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed.ID, GUID: "3", Title: "Rust Basics", Content: "Rust is great for golang interop", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
@@ -220,18 +220,18 @@ func TestCountEntries(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	feed := &model.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
 	_ = s.AddFeed(ctx, feed)
 
-	_, _ = s.AddEntries(ctx, []*core.Entry{
+	_, _ = s.AddEntries(ctx, []*model.Entry{
 		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed.ID, GUID: "2", Title: "Entry 2", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	})
 
-	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 1})
+	entries, _ := s.ListEntries(ctx, model.EntryFilter{Limit: 1})
 	_ = s.MarkEntryRead(ctx, entries[0].ID)
 
-	total, err := s.CountEntries(ctx, core.EntryFilter{})
+	total, err := s.CountEntries(ctx, model.EntryFilter{})
 	if err != nil {
 		t.Fatalf("CountEntries failed: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestCountEntries(t *testing.T) {
 		t.Errorf("total = %d, want 2", total)
 	}
 
-	unread, err := s.CountEntries(ctx, core.EntryFilter{UnreadOnly: true})
+	unread, err := s.CountEntries(ctx, model.EntryFilter{UnreadOnly: true})
 	if err != nil {
 		t.Fatalf("CountEntries unread failed: %v", err)
 	}
@@ -252,12 +252,12 @@ func TestListEntriesAndCountEntriesCombinedFilters(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed1 := &core.Feed{URL: "https://a.com/feed", Title: "A"}
-	feed2 := &core.Feed{URL: "https://b.com/feed", Title: "B"}
+	feed1 := &model.Feed{URL: "https://a.com/feed", Title: "A"}
+	feed2 := &model.Feed{URL: "https://b.com/feed", Title: "B"}
 	_ = s.AddFeed(ctx, feed1)
 	_ = s.AddFeed(ctx, feed2)
 
-	_, _ = s.AddEntries(ctx, []*core.Entry{
+	_, _ = s.AddEntries(ctx, []*model.Entry{
 		{FeedID: feed1.ID, GUID: "a1", Title: "A1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed1.ID, GUID: "a2", Title: "A2", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed2.ID, GUID: "b1", Title: "B1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
@@ -266,7 +266,7 @@ func TestListEntriesAndCountEntriesCombinedFilters(t *testing.T) {
 	_ = s.AddTag(ctx, feed1.ID, "tech")
 	_ = s.AddTag(ctx, feed2.ID, "news")
 
-	allEntries, err := s.ListEntries(ctx, core.EntryFilter{Limit: 10})
+	allEntries, err := s.ListEntries(ctx, model.EntryFilter{Limit: 10})
 	if err != nil {
 		t.Fatalf("ListEntries failed: %v", err)
 	}
@@ -296,17 +296,17 @@ func TestListEntriesAndCountEntriesCombinedFilters(t *testing.T) {
 	feed2ID := feed2.ID
 	testCases := []struct {
 		name   string
-		filter core.EntryFilter
+		filter model.EntryFilter
 		want   int
 	}{
-		{name: "all", filter: core.EntryFilter{}, want: 3},
-		{name: "feed1", filter: core.EntryFilter{FeedID: &feed1ID}, want: 2},
-		{name: "tag", filter: core.EntryFilter{Tag: "tech"}, want: 2},
-		{name: "unread", filter: core.EntryFilter{UnreadOnly: true}, want: 2},
-		{name: "starred", filter: core.EntryFilter{StarredOnly: true}, want: 1},
-		{name: "feed1 unread tag", filter: core.EntryFilter{FeedID: &feed1ID, UnreadOnly: true, Tag: "tech"}, want: 1},
-		{name: "feed1 starred tag", filter: core.EntryFilter{FeedID: &feed1ID, StarredOnly: true, Tag: "tech"}, want: 1},
-		{name: "feed2 tech", filter: core.EntryFilter{FeedID: &feed2ID, Tag: "tech"}, want: 0},
+		{name: "all", filter: model.EntryFilter{}, want: 3},
+		{name: "feed1", filter: model.EntryFilter{FeedID: &feed1ID}, want: 2},
+		{name: "tag", filter: model.EntryFilter{Tag: "tech"}, want: 2},
+		{name: "unread", filter: model.EntryFilter{UnreadOnly: true}, want: 2},
+		{name: "starred", filter: model.EntryFilter{StarredOnly: true}, want: 1},
+		{name: "feed1 unread tag", filter: model.EntryFilter{FeedID: &feed1ID, UnreadOnly: true, Tag: "tech"}, want: 1},
+		{name: "feed1 starred tag", filter: model.EntryFilter{FeedID: &feed1ID, StarredOnly: true, Tag: "tech"}, want: 1},
+		{name: "feed2 tech", filter: model.EntryFilter{FeedID: &feed2ID, Tag: "tech"}, want: 0},
 	}
 
 	for _, tc := range testCases {
@@ -331,14 +331,14 @@ func TestListEntriesPublishedDateFilter(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	feed := &model.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
 	_ = s.AddFeed(ctx, feed)
 
 	t1 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	t2 := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
 	t3 := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 
-	_, _ = s.AddEntries(ctx, []*core.Entry{
+	_, _ = s.AddEntries(ctx, []*model.Entry{
 		{FeedID: feed.ID, GUID: "jan", Title: "January", PublishedAt: &t1, Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed.ID, GUID: "feb", Title: "February", PublishedAt: &t2, Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed.ID, GUID: "mar", Title: "March", PublishedAt: &t3, Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
@@ -346,7 +346,7 @@ func TestListEntriesPublishedDateFilter(t *testing.T) {
 
 	// After Jan 15 → Feb, Mar
 	after := time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC)
-	entries, err := s.ListEntries(ctx, core.EntryFilter{PublishedAfter: &after, Limit: 10})
+	entries, err := s.ListEntries(ctx, model.EntryFilter{PublishedAfter: &after, Limit: 10})
 	if err != nil {
 		t.Fatalf("ListEntries failed: %v", err)
 	}
@@ -356,7 +356,7 @@ func TestListEntriesPublishedDateFilter(t *testing.T) {
 
 	// Before Feb 1 → Jan
 	before := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
-	entries, err = s.ListEntries(ctx, core.EntryFilter{PublishedBefore: &before, Limit: 10})
+	entries, err = s.ListEntries(ctx, model.EntryFilter{PublishedBefore: &before, Limit: 10})
 	if err != nil {
 		t.Fatalf("ListEntries failed: %v", err)
 	}
@@ -366,7 +366,7 @@ func TestListEntriesPublishedDateFilter(t *testing.T) {
 
 	// Between Jan 15 and Feb 15 → Feb only
 	beforeMid := time.Date(2026, 2, 15, 0, 0, 0, 0, time.UTC)
-	entries, err = s.ListEntries(ctx, core.EntryFilter{PublishedAfter: &after, PublishedBefore: &beforeMid, Limit: 10})
+	entries, err = s.ListEntries(ctx, model.EntryFilter{PublishedAfter: &after, PublishedBefore: &beforeMid, Limit: 10})
 	if err != nil {
 		t.Fatalf("ListEntries failed: %v", err)
 	}
@@ -375,7 +375,7 @@ func TestListEntriesPublishedDateFilter(t *testing.T) {
 	}
 
 	// Count should also respect date filters
-	count, err := s.CountEntries(ctx, core.EntryFilter{PublishedAfter: &after})
+	count, err := s.CountEntries(ctx, model.EntryFilter{PublishedAfter: &after})
 	if err != nil {
 		t.Fatalf("CountEntries failed: %v", err)
 	}
@@ -388,15 +388,15 @@ func TestCleanupEntries(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	feed := &model.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
 	_ = s.AddFeed(ctx, feed)
 
-	_, _ = s.AddEntries(ctx, []*core.Entry{
+	_, _ = s.AddEntries(ctx, []*model.Entry{
 		{FeedID: feed.ID, GUID: "1", Title: "Old Entry", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed.ID, GUID: "2", Title: "Starred Old", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	})
 
-	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 10})
+	entries, _ := s.ListEntries(ctx, model.EntryFilter{Limit: 10})
 	_ = s.StarEntry(ctx, entries[0].ID)
 
 	deleted, err := s.CleanupEntries(ctx, time.Now().Add(time.Hour))
@@ -407,7 +407,7 @@ func TestCleanupEntries(t *testing.T) {
 		t.Errorf("deleted = %d, want 1 (starred should survive)", deleted)
 	}
 
-	remaining, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 10})
+	remaining, _ := s.ListEntries(ctx, model.EntryFilter{Limit: 10})
 	if len(remaining) != 1 {
 		t.Errorf("remaining = %d, want 1", len(remaining))
 	}
@@ -417,14 +417,14 @@ func TestGetEntry(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
+	feed := &model.Feed{URL: "https://example.com/feed.xml", Title: "Example"}
 	_ = s.AddFeed(ctx, feed)
 
-	_, _ = s.AddEntries(ctx, []*core.Entry{
+	_, _ = s.AddEntries(ctx, []*model.Entry{
 		{FeedID: feed.ID, GUID: "1", Title: "Entry 1", Link: "https://example.com/1", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	})
 
-	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 1})
+	entries, _ := s.ListEntries(ctx, model.EntryFilter{Limit: 1})
 	id := entries[0].ID
 
 	got, err := s.GetEntry(ctx, id)
@@ -444,7 +444,7 @@ func TestGetEntryNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for non-existent entry")
 	}
-	if !errors.Is(err, core.ErrEntryNotFound) {
+	if !errors.Is(err, model.ErrEntryNotFound) {
 		t.Fatalf("expected ErrEntryNotFound, got %v", err)
 	}
 }
@@ -453,7 +453,7 @@ func TestRunInTxCommitsOnSuccess(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Before"}
+	feed := &model.Feed{URL: "https://example.com/feed.xml", Title: "Before"}
 	_ = s.AddFeed(ctx, feed)
 
 	err := s.RunInTx(ctx, func(ctx context.Context) error {
@@ -473,7 +473,7 @@ func TestRunInTxRollsBackOnError(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Before"}
+	feed := &model.Feed{URL: "https://example.com/feed.xml", Title: "Before"}
 	_ = s.AddFeed(ctx, feed)
 
 	boom := errors.New("intentional failure")
@@ -496,7 +496,7 @@ func TestRunInTxReusesOuterTransaction(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Before"}
+	feed := &model.Feed{URL: "https://example.com/feed.xml", Title: "Before"}
 	_ = s.AddFeed(ctx, feed)
 
 	boom := errors.New("outer failure")
@@ -522,7 +522,7 @@ func TestEnableFeedRollsBackOnPartialFailure(t *testing.T) {
 	ctx := context.Background()
 
 	// Add a feed with an error so it gets disabled.
-	feed := &core.Feed{URL: "https://example.com/feed.xml", Title: "Feed"}
+	feed := &model.Feed{URL: "https://example.com/feed.xml", Title: "Feed"}
 	_ = s.AddFeed(ctx, feed)
 	_ = s.SetFeedDisabled(ctx, feed.ID, true)
 	_ = s.RecordFeedError(ctx, feed.ID, "some error")
@@ -550,18 +550,18 @@ func TestFindDuplicateEntries(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	feed1 := &core.Feed{URL: "https://a.com/feed", Title: "A"}
-	feed2 := &core.Feed{URL: "https://b.com/feed", Title: "B"}
+	feed1 := &model.Feed{URL: "https://a.com/feed", Title: "A"}
+	feed2 := &model.Feed{URL: "https://b.com/feed", Title: "B"}
 	_ = s.AddFeed(ctx, feed1)
 	_ = s.AddFeed(ctx, feed2)
 
-	_, _ = s.AddEntries(ctx, []*core.Entry{
+	_, _ = s.AddEntries(ctx, []*model.Entry{
 		{FeedID: feed1.ID, GUID: "a1", Title: "Shared Article", Link: "https://example.com/article", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed2.ID, GUID: "b1", Title: "Same Article", Link: "https://example.com/article", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 		{FeedID: feed2.ID, GUID: "b2", Title: "Different Article", Link: "https://example.com/other", Categories: json.RawMessage("[]"), Enclosures: json.RawMessage("[]"), Authors: json.RawMessage("[]"), Links: json.RawMessage("[]"), Contributors: json.RawMessage("[]")},
 	})
 
-	entries, _ := s.ListEntries(ctx, core.EntryFilter{Limit: 10})
+	entries, _ := s.ListEntries(ctx, model.EntryFilter{Limit: 10})
 	var targetID int64
 	for _, e := range entries {
 		if e.GUID == "a1" {

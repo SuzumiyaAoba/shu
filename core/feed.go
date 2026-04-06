@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/SuzumiyaAoba/shu/core/fetch"
+	"github.com/SuzumiyaAoba/shu/model"
 	"github.com/mmcdole/gofeed"
 )
 
@@ -44,17 +46,17 @@ func (m *FeedManager) setHTTPClient(client *http.Client) {
 //     extract metadata (title, site URL, description, language, image, type).
 //  2. If titleOverride is non-empty, it is used instead of the title found in
 //     the feed document.
-//  3. Persists the feed record via the store. On success the returned [Feed]
+//  3. Persists the feed record via the store. On success the returned [model.Feed]
 //     has its ID and AddedAt fields populated.
 //
 // An error is returned if the URL is unreachable, the document is not a valid
 // feed, or the store rejects the insertion (e.g. duplicate URL).
-func (m *FeedManager) AddFeed(ctx context.Context, url string, titleOverride string) (*Feed, error) {
+func (m *FeedManager) AddFeed(ctx context.Context, url string, titleOverride string) (*model.Feed, error) {
 	if err := ValidateFeedURL(url, m.allowPrivateAddresses); err != nil {
 		return nil, fmt.Errorf("validate feed URL: %w", err)
 	}
 
-	body, _, _, err := fetchBodyConditional(ctx, m.client, url, "", "")
+	body, _, _, err := fetch.FetchBodyConditional(ctx, m.client, url, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("fetch feed %s: %w", url, err)
 	}
@@ -62,7 +64,7 @@ func (m *FeedManager) AddFeed(ctx context.Context, url string, titleOverride str
 	fp := gofeed.NewParser()
 	parsed, err := fp.Parse(bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("%w: parse feed %s: %v", ErrInvalidFeed, url, err)
+		return nil, fmt.Errorf("%w: parse feed %s: %v", model.ErrInvalidFeed, url, err)
 	}
 
 	title := parsed.Title
@@ -80,7 +82,7 @@ func (m *FeedManager) AddFeed(ctx context.Context, url string, titleOverride str
 		imageURL = parsed.Image.URL
 	}
 
-	feed := &Feed{
+	feed := &model.Feed{
 		URL:         url,
 		Title:       title,
 		SiteURL:     siteURL,
@@ -100,12 +102,12 @@ func (m *FeedManager) AddFeed(ctx context.Context, url string, titleOverride str
 
 // ListFeeds returns all registered feeds ordered by ID.
 // It delegates directly to the store without additional business logic.
-func (m *FeedManager) ListFeeds(ctx context.Context) ([]*Feed, error) {
+func (m *FeedManager) ListFeeds(ctx context.Context) ([]*model.Feed, error) {
 	return m.store.ListFeeds(ctx)
 }
 
 // GetFeed retrieves a single feed by its primary key.
-func (m *FeedManager) GetFeed(ctx context.Context, id int64) (*Feed, error) {
+func (m *FeedManager) GetFeed(ctx context.Context, id int64) (*model.Feed, error) {
 	return m.store.GetFeed(ctx, id)
 }
 
@@ -123,7 +125,7 @@ func (m *FeedManager) RemoveFeed(ctx context.Context, id int64) error {
 // validation. The feed's URL must be non-empty. This is intended for bulk
 // imports (e.g. OPML) where metadata comes from the import source rather
 // than the feed server. Invalid URLs will fail when the feed is fetched.
-func (m *FeedManager) AddFeedDirect(ctx context.Context, feed *Feed) error {
+func (m *FeedManager) AddFeedDirect(ctx context.Context, feed *model.Feed) error {
 	if feed.URL == "" {
 		return fmt.Errorf("feed URL is required")
 	}
@@ -134,19 +136,19 @@ func (m *FeedManager) AddFeedDirect(ctx context.Context, feed *Feed) error {
 	return nil
 }
 
-func (s *Service) AddFeed(ctx context.Context, url string, titleOverride string) (*Feed, error) {
+func (s *Service) AddFeed(ctx context.Context, url string, titleOverride string) (*model.Feed, error) {
 	return s.feeds.AddFeed(ctx, url, titleOverride)
 }
 
-func (s *Service) AddFeedDirect(ctx context.Context, feed *Feed) error {
+func (s *Service) AddFeedDirect(ctx context.Context, feed *model.Feed) error {
 	return s.feeds.AddFeedDirect(ctx, feed)
 }
 
-func (s *Service) ListFeeds(ctx context.Context) ([]*Feed, error) {
+func (s *Service) ListFeeds(ctx context.Context) ([]*model.Feed, error) {
 	return s.feeds.ListFeeds(ctx)
 }
 
-func (s *Service) GetFeed(ctx context.Context, id int64) (*Feed, error) {
+func (s *Service) GetFeed(ctx context.Context, id int64) (*model.Feed, error) {
 	return s.feeds.GetFeed(ctx, id)
 }
 

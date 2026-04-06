@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 	"github.com/SuzumiyaAoba/shu/store"
 )
 
@@ -118,7 +119,7 @@ func TestAddFeedInvalidDocument(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected invalid feed error")
 	}
-	if !errors.Is(err, core.ErrInvalidFeed) {
+	if !errors.Is(err, model.ErrInvalidFeed) {
 		t.Fatalf("expected ErrInvalidFeed, got %v", err)
 	}
 }

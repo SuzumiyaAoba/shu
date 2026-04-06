@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 type maintenanceFeedStore interface {
@@ -41,6 +43,15 @@ func (m *MaintenanceOps) CleanupEntries(ctx context.Context, olderThan time.Dura
 	return n, nil
 }
 
+// FeedStatsAll returns aggregate statistics for all feeds.
+func (m *MaintenanceOps) FeedStatsAll(ctx context.Context) ([]model.FeedStats, error) {
+	return m.store.FeedStats(ctx)
+}
+
 func (s *Service) CleanupEntries(ctx context.Context, olderThan time.Duration) (int, error) {
 	return s.maintenance.CleanupEntries(ctx, olderThan)
+}
+
+func (s *Service) FeedStatsAll(ctx context.Context) ([]model.FeedStats, error) {
+	return s.maintenance.FeedStatsAll(ctx)
 }

@@ -1,4 +1,4 @@
-package core
+package fetch
 
 import (
 	"bytes"
@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/SuzumiyaAoba/shu/model"
 	"github.com/mmcdole/gofeed"
 	"github.com/mmcdole/gofeed/atom"
 )
@@ -27,11 +28,11 @@ func parseAtomEntries(body []byte) map[string]*atom.Entry {
 	return m
 }
 
-func parseFetchedEntries(feedID int64, feedURL string, body []byte) ([]*Entry, error) {
+func parseFetchedEntries(feedID int64, feedURL string, body []byte) ([]*model.Entry, error) {
 	fp := gofeed.NewParser()
 	parsed, err := fp.Parse(bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("%w: parse feed %s: %v", ErrInvalidFeed, feedURL, err)
+		return nil, fmt.Errorf("%w: parse feed %s: %v", model.ErrInvalidFeed, feedURL, err)
 	}
 
 	var atomEntryByID map[string]*atom.Entry
@@ -39,7 +40,7 @@ func parseFetchedEntries(feedID int64, feedURL string, body []byte) ([]*Entry, e
 		atomEntryByID = parseAtomEntries(body)
 	}
 
-	entries := make([]*Entry, 0, len(parsed.Items))
+	entries := make([]*model.Entry, 0, len(parsed.Items))
 	for _, item := range parsed.Items {
 		guid := item.GUID
 		if guid == "" {
@@ -59,8 +60,8 @@ func parseFetchedEntries(feedID int64, feedURL string, body []byte) ([]*Entry, e
 // buildEntry constructs an Entry from a universal gofeed.Item and an optional
 // raw atom.Entry (for Atom-specific fields). The atomEntry may be nil for RSS
 // or JSON feeds.
-func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.Entry) *Entry {
-	e := &Entry{
+func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.Entry) *model.Entry {
+	e := &model.Entry{
 		FeedID:       feedID,
 		GUID:         guid,
 		Title:        item.Title,
@@ -86,7 +87,7 @@ func buildEntry(feedID int64, guid string, item *gofeed.Item, atomEntry *atom.En
 	return e
 }
 
-func populateEntryTimes(e *Entry, item *gofeed.Item) {
+func populateEntryTimes(e *model.Entry, item *gofeed.Item) {
 	if item.PublishedParsed != nil {
 		t := item.PublishedParsed.UTC()
 		e.PublishedAt = &t
@@ -97,7 +98,7 @@ func populateEntryTimes(e *Entry, item *gofeed.Item) {
 	}
 }
 
-func populateEntryAuthorAndImage(e *Entry, item *gofeed.Item) {
+func populateEntryAuthorAndImage(e *model.Entry, item *gofeed.Item) {
 	if len(item.Authors) > 0 && item.Authors[0] != nil {
 		e.Author = item.Authors[0].Name
 	} else if item.Author != nil {
@@ -108,11 +109,11 @@ func populateEntryAuthorAndImage(e *Entry, item *gofeed.Item) {
 	}
 }
 
-func populateEntryAuthors(e *Entry, item *gofeed.Item, atomEntry *atom.Entry) {
+func populateEntryAuthors(e *model.Entry, item *gofeed.Item, atomEntry *atom.Entry) {
 	if atomEntry != nil && len(atomEntry.Authors) > 0 {
-		persons := make([]EntryPerson, len(atomEntry.Authors))
+		persons := make([]model.EntryPerson, len(atomEntry.Authors))
 		for i, a := range atomEntry.Authors {
-			persons[i] = EntryPerson{Name: a.Name, Email: a.Email, URI: a.URI}
+			persons[i] = model.EntryPerson{Name: a.Name, Email: a.Email, URI: a.URI}
 		}
 		e.Authors, _ = json.Marshal(persons)
 		return
@@ -120,10 +121,10 @@ func populateEntryAuthors(e *Entry, item *gofeed.Item, atomEntry *atom.Entry) {
 	if len(item.Authors) == 0 {
 		return
 	}
-	persons := make([]EntryPerson, 0, len(item.Authors))
+	persons := make([]model.EntryPerson, 0, len(item.Authors))
 	for _, a := range item.Authors {
 		if a != nil {
-			persons = append(persons, EntryPerson{Name: a.Name, Email: a.Email})
+			persons = append(persons, model.EntryPerson{Name: a.Name, Email: a.Email})
 		}
 	}
 	if len(persons) > 0 {
@@ -131,11 +132,11 @@ func populateEntryAuthors(e *Entry, item *gofeed.Item, atomEntry *atom.Entry) {
 	}
 }
 
-func populateEntryLinks(e *Entry, item *gofeed.Item, atomEntry *atom.Entry) {
+func populateEntryLinks(e *model.Entry, item *gofeed.Item, atomEntry *atom.Entry) {
 	if atomEntry != nil && len(atomEntry.Links) > 0 {
-		links := make([]EntryLink, len(atomEntry.Links))
+		links := make([]model.EntryLink, len(atomEntry.Links))
 		for i, l := range atomEntry.Links {
-			links[i] = EntryLink{
+			links[i] = model.EntryLink{
 				Href: l.Href, Rel: l.Rel, Type: l.Type,
 				Hreflang: l.Hreflang, Title: l.Title, Length: l.Length,
 			}
@@ -146,18 +147,18 @@ func populateEntryLinks(e *Entry, item *gofeed.Item, atomEntry *atom.Entry) {
 	if len(item.Links) == 0 {
 		return
 	}
-	links := make([]EntryLink, len(item.Links))
+	links := make([]model.EntryLink, len(item.Links))
 	for i, href := range item.Links {
-		links[i] = EntryLink{Href: href}
+		links[i] = model.EntryLink{Href: href}
 	}
 	e.Links, _ = json.Marshal(links)
 }
 
-func populateEntryCategories(e *Entry, item *gofeed.Item, atomEntry *atom.Entry) {
+func populateEntryCategories(e *model.Entry, item *gofeed.Item, atomEntry *atom.Entry) {
 	if atomEntry != nil && len(atomEntry.Categories) > 0 {
-		cats := make([]EntryCategory, len(atomEntry.Categories))
+		cats := make([]model.EntryCategory, len(atomEntry.Categories))
 		for i, c := range atomEntry.Categories {
-			cats[i] = EntryCategory{Term: c.Term, Scheme: c.Scheme, Label: c.Label}
+			cats[i] = model.EntryCategory{Term: c.Term, Scheme: c.Scheme, Label: c.Label}
 		}
 		e.Categories, _ = json.Marshal(cats)
 		return
@@ -165,36 +166,36 @@ func populateEntryCategories(e *Entry, item *gofeed.Item, atomEntry *atom.Entry)
 	if len(item.Categories) == 0 {
 		return
 	}
-	cats := make([]EntryCategory, len(item.Categories))
+	cats := make([]model.EntryCategory, len(item.Categories))
 	for i, c := range item.Categories {
-		cats[i] = EntryCategory{Term: c}
+		cats[i] = model.EntryCategory{Term: c}
 	}
 	e.Categories, _ = json.Marshal(cats)
 }
 
-func populateEntryEnclosures(e *Entry, item *gofeed.Item) {
+func populateEntryEnclosures(e *model.Entry, item *gofeed.Item) {
 	if len(item.Enclosures) == 0 {
 		return
 	}
-	encs := make([]EntryEnclosure, len(item.Enclosures))
+	encs := make([]model.EntryEnclosure, len(item.Enclosures))
 	for i, v := range item.Enclosures {
-		encs[i] = EntryEnclosure{URL: v.URL, Length: v.Length, Type: v.Type}
+		encs[i] = model.EntryEnclosure{URL: v.URL, Length: v.Length, Type: v.Type}
 	}
 	e.Enclosures, _ = json.Marshal(encs)
 }
 
-func populateEntryContributors(e *Entry, atomEntry *atom.Entry) {
+func populateEntryContributors(e *model.Entry, atomEntry *atom.Entry) {
 	if atomEntry == nil || len(atomEntry.Contributors) == 0 {
 		return
 	}
-	persons := make([]EntryPerson, len(atomEntry.Contributors))
+	persons := make([]model.EntryPerson, len(atomEntry.Contributors))
 	for i, c := range atomEntry.Contributors {
-		persons[i] = EntryPerson{Name: c.Name, Email: c.Email, URI: c.URI}
+		persons[i] = model.EntryPerson{Name: c.Name, Email: c.Email, URI: c.URI}
 	}
 	e.Contributors, _ = json.Marshal(persons)
 }
 
-func populateEntryAtomMetadata(e *Entry, atomEntry *atom.Entry) {
+func populateEntryAtomMetadata(e *model.Entry, atomEntry *atom.Entry) {
 	if atomEntry == nil {
 		return
 	}
@@ -202,7 +203,7 @@ func populateEntryAtomMetadata(e *Entry, atomEntry *atom.Entry) {
 	if atomEntry.Source == nil {
 		return
 	}
-	src := EntrySource{
+	src := model.EntrySource{
 		Title:   atomEntry.Source.Title,
 		ID:      atomEntry.Source.ID,
 		Updated: atomEntry.Source.Updated,

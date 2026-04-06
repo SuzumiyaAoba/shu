@@ -14,17 +14,19 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/SuzumiyaAoba/shu/core/fetch"
+	"github.com/SuzumiyaAoba/shu/model"
 	"github.com/hashicorp/go-retryablehttp"
 )
 
 // FeedStore handles feed CRUD operations.
 type FeedStore interface {
-	AddFeed(ctx context.Context, feed *Feed) error
-	GetFeed(ctx context.Context, id int64) (*Feed, error)
-	GetFeedByURL(ctx context.Context, url string) (*Feed, error)
-	ListFeeds(ctx context.Context) ([]*Feed, error)
+	AddFeed(ctx context.Context, feed *model.Feed) error
+	GetFeed(ctx context.Context, id int64) (*model.Feed, error)
+	GetFeedByURL(ctx context.Context, url string) (*model.Feed, error)
+	ListFeeds(ctx context.Context) ([]*model.Feed, error)
 	RemoveFeed(ctx context.Context, id int64) error
-	UpdateFeed(ctx context.Context, id int64, update FeedUpdate) error
+	UpdateFeed(ctx context.Context, id int64, update model.FeedUpdate) error
 	UpdateFeedFetchedAt(ctx context.Context, id int64) error
 	UpdateFeedCacheHeaders(ctx context.Context, id int64, etag, lastModified string) error
 }
@@ -34,19 +36,19 @@ type FeedHealthStore interface {
 	RecordFeedError(ctx context.Context, id int64, errMsg string) error
 	ResetFeedError(ctx context.Context, id int64) error
 	SetFeedDisabled(ctx context.Context, id int64, disabled bool) error
-	ListDeadFeeds(ctx context.Context) ([]*Feed, error)
+	ListDeadFeeds(ctx context.Context) ([]*model.Feed, error)
 }
 
 // EntryStore handles entry persistence and queries.
 type EntryStore interface {
-	AddEntries(ctx context.Context, entries []*Entry) (int, error)
-	GetEntry(ctx context.Context, id int64) (*Entry, error)
-	ListEntries(ctx context.Context, filter EntryFilter) ([]*Entry, error)
-	CountEntries(ctx context.Context, filter EntryFilter) (int, error)
-	SearchEntries(ctx context.Context, query string, limit int) ([]*Entry, error)
-	SearchEntriesPage(ctx context.Context, query string, limit, offset int) ([]*Entry, error)
+	AddEntries(ctx context.Context, entries []*model.Entry) (int, error)
+	GetEntry(ctx context.Context, id int64) (*model.Entry, error)
+	ListEntries(ctx context.Context, filter model.EntryFilter) ([]*model.Entry, error)
+	CountEntries(ctx context.Context, filter model.EntryFilter) (int, error)
+	SearchEntries(ctx context.Context, query string, limit int) ([]*model.Entry, error)
+	SearchEntriesPage(ctx context.Context, query string, limit, offset int) ([]*model.Entry, error)
 	CountSearchEntries(ctx context.Context, query string) (int, error)
-	FindDuplicateEntries(ctx context.Context, entryID int64) ([]*Entry, error)
+	FindDuplicateEntries(ctx context.Context, entryID int64) ([]*model.Entry, error)
 }
 
 // EntryStateStore manages read/star state on entries.
@@ -65,10 +67,10 @@ type EntryStateStore interface {
 type TagStore interface {
 	AddTag(ctx context.Context, feedID int64, tagName string) error
 	RemoveTag(ctx context.Context, feedID int64, tagName string) error
-	ListTags(ctx context.Context, feedID int64) ([]Tag, error)
-	ListFeedTags(ctx context.Context) (map[int64][]Tag, error)
-	ListAllTags(ctx context.Context) ([]Tag, error)
-	ListFeedsByTag(ctx context.Context, tagName string) ([]*Feed, error)
+	ListTags(ctx context.Context, feedID int64) ([]model.Tag, error)
+	ListFeedTags(ctx context.Context) (map[int64][]model.Tag, error)
+	ListAllTags(ctx context.Context) ([]model.Tag, error)
+	ListFeedsByTag(ctx context.Context, tagName string) ([]*model.Feed, error)
 }
 
 // EntryIterator is an optional extension of [EntryStore] that supports
@@ -82,12 +84,12 @@ type TagStore interface {
 //	    for entry, err := range it.IterEntries(ctx, filter) { ... }
 //	}
 type EntryIterator interface {
-	IterEntries(ctx context.Context, filter EntryFilter) iter.Seq2[*Entry, error]
+	IterEntries(ctx context.Context, filter model.EntryFilter) iter.Seq2[*model.Entry, error]
 }
 
 // MaintenanceStore provides housekeeping operations.
 type MaintenanceStore interface {
-	FeedStats(ctx context.Context) ([]FeedStats, error)
+	FeedStats(ctx context.Context) ([]model.FeedStats, error)
 	CleanupEntries(ctx context.Context, olderThan time.Time) (int, error)
 }
 
@@ -135,7 +137,7 @@ func (t *userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error
 // this package.
 type Service struct {
 	feeds       *FeedManager
-	fetcher     *Fetcher
+	fetcher     *fetch.Fetcher
 	entries     *EntryQueries
 	entryState  *EntryStateManager
 	tags        *TagManager
@@ -190,7 +192,7 @@ func New(store Store, logger *slog.Logger, options ...Option) *Service {
 
 	svc := &Service{
 		feeds:       feeds,
-		fetcher:     NewFetcher(store, logger, client),
+		fetcher:     fetch.NewFetcher(store, logger, client),
 		entries:     NewEntryQueries(store),
 		entryState:  NewEntryStateManager(store),
 		tags:        tags,
@@ -243,6 +245,6 @@ func httpClientWithUserAgent(c *http.Client) *http.Client {
 
 func (s *Service) setHTTPClient(c *http.Client) {
 	s.feeds.setHTTPClient(c)
-	s.fetcher.setHTTPClient(c)
+	s.fetcher.SetHTTPClient(c)
 	s.discovery.setHTTPClient(c)
 }

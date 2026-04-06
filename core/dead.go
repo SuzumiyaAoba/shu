@@ -1,16 +1,20 @@
 package core
 
-import "context"
+import (
+	"context"
+
+	"github.com/SuzumiyaAoba/shu/model"
+)
 
 // ListDeadFeeds returns feeds with recorded fetch failures.
 // Manually disabled feeds without recorded errors are excluded.
-func (m *MaintenanceOps) ListDeadFeeds(ctx context.Context) ([]*Feed, error) {
+func (m *MaintenanceOps) ListDeadFeeds(ctx context.Context) ([]*model.Feed, error) {
 	return m.feedStore.ListDeadFeeds(ctx)
 }
 
 // RemoveDeadFeeds deletes feeds with recorded fetch failures and returns the
 // removed feeds.
-func (m *MaintenanceOps) RemoveDeadFeeds(ctx context.Context) ([]*Feed, error) {
+func (m *MaintenanceOps) RemoveDeadFeeds(ctx context.Context) ([]*model.Feed, error) {
 	dead, err := m.ListDeadFeeds(ctx)
 	if err != nil {
 		return nil, err
@@ -33,10 +37,10 @@ func (m *MaintenanceOps) RemoveDeadFeeds(ctx context.Context) ([]*Feed, error) {
 	return dead, nil
 }
 
-func (s *Service) ListDeadFeeds(ctx context.Context) ([]*Feed, error) {
+func (s *Service) ListDeadFeeds(ctx context.Context) ([]*model.Feed, error) {
 	return s.maintenance.ListDeadFeeds(ctx)
 }
 
-func (s *Service) RemoveDeadFeeds(ctx context.Context) ([]*Feed, error) {
+func (s *Service) RemoveDeadFeeds(ctx context.Context) ([]*model.Feed, error) {
 	return s.maintenance.RemoveDeadFeeds(ctx)
 }

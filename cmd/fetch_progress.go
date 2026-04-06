@@ -4,12 +4,12 @@ import (
 	"io"
 	"sync/atomic"
 
-	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/core/fetch"
 	"github.com/vbauerster/mpb/v8"
 	"github.com/vbauerster/mpb/v8/decor"
 )
 
-// fetchProgress implements core.FetchObserver and displays a single progress
+// fetchProgress implements fetch.Observer and displays a single progress
 // bar on the given writer while feeds are being fetched.
 type fetchProgress struct {
 	p       *mpb.Progress
@@ -37,15 +37,15 @@ func newFetchProgress(w io.Writer, total int) *fetchProgress {
 }
 
 // OnFetchEvent is called by the service for every fetch lifecycle event.
-func (fp *fetchProgress) OnFetchEvent(event core.FetchEvent) {
+func (fp *fetchProgress) OnFetchEvent(event fetch.Event) {
 	switch event.Type {
-	case core.FetchEventCompleted:
+	case fetch.EventCompleted:
 		fp.fetched.Add(1)
 		if event.Err != nil {
 			fp.errors.Add(1)
 		}
 		fp.bar.Increment()
-	case core.FetchEventSkipped:
+	case fetch.EventSkipped:
 		fp.skipped.Add(1)
 		fp.bar.Increment()
 	}

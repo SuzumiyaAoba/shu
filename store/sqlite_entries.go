@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 type entryFilterQuery struct {
@@ -24,7 +24,7 @@ type entryFilterQuery struct {
 // If the input slice is empty or nil, it returns (0, nil) immediately without
 // opening a transaction. Participates in an outer transaction if one is
 // present in ctx.
-func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (int, error) {
+func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*model.Entry) (int, error) {
 	if len(entries) == 0 {
 		return 0, nil
 	}
@@ -42,7 +42,7 @@ func (s *SQLiteStore) AddEntries(ctx context.Context, entries []*core.Entry) (in
 }
 
 // GetEntry retrieves a single entry by its primary key.
-func (s *SQLiteStore) GetEntry(ctx context.Context, id int64) (*core.Entry, error) {
+func (s *SQLiteStore) GetEntry(ctx context.Context, id int64) (*model.Entry, error) {
 	row := s.executor(ctx).QueryRowContext(ctx, `SELECT `+entryColumns+` FROM entries WHERE id = ?`, id)
 	return fetchEntry(row, fmt.Sprintf("entry %d", id))
 }
@@ -55,29 +55,29 @@ func (s *SQLiteStore) GetEntry(ctx context.Context, id int64) (*core.Entry, erro
 //   - Offset: skips the first N rows for pagination.
 //
 // Results are always ordered by fetched_at DESC (newest first).
-func (s *SQLiteStore) ListEntries(ctx context.Context, filter core.EntryFilter) ([]*core.Entry, error) {
+func (s *SQLiteStore) ListEntries(ctx context.Context, filter model.EntryFilter) ([]*model.Entry, error) {
 	query, args := newEntryFilterQuery(filter).buildSelectEntries(filter)
 
 	rows, err := s.executor(ctx).QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, &core.StoreError{Op: "list", Table: "entries", Err: err}
+		return nil, &model.StoreError{Op: "list", Table: "entries", Err: err}
 	}
 	return collectEntries(rows)
 }
 
 // IterEntries returns a range-over-func iterator that streams entries matching
 // the given filter one row at a time, without loading the full result set into
-// memory. It implements [core.EntryIterator].
+// memory. It implements [model.EntryIterator].
 //
 // Iteration stops early when the caller returns false from the yield function.
 // Any query or scan error is delivered as the error value in the final yield
 // call.
-func (s *SQLiteStore) IterEntries(ctx context.Context, filter core.EntryFilter) iter.Seq2[*core.Entry, error] {
-	return func(yield func(*core.Entry, error) bool) {
+func (s *SQLiteStore) IterEntries(ctx context.Context, filter model.EntryFilter) iter.Seq2[*model.Entry, error] {
+	return func(yield func(*model.Entry, error) bool) {
 		query, args := newEntryFilterQuery(filter).buildSelectEntries(filter)
 		rows, err := s.executor(ctx).QueryContext(ctx, query, args...)
 		if err != nil {
-			yield(nil, &core.StoreError{Op: "iter", Table: "entries", Err: err})
+			yield(nil, &model.StoreError{Op: "iter", Table: "entries", Err: err})
 			return
 		}
 		for entry, err := range iterRows(rows, scanEntry) {
@@ -89,7 +89,7 @@ func (s *SQLiteStore) IterEntries(ctx context.Context, filter core.EntryFilter) 
 }
 
 // CountEntries returns the total number of entries matching the filter.
-func (s *SQLiteStore) CountEntries(ctx context.Context, filter core.EntryFilter) (int, error) {
+func (s *SQLiteStore) CountEntries(ctx context.Context, filter model.EntryFilter) (int, error) {
 	query, args := newEntryFilterQuery(filter).buildCountEntries()
 
 	var count int
@@ -99,7 +99,7 @@ func (s *SQLiteStore) CountEntries(ctx context.Context, filter core.EntryFilter)
 	return count, nil
 }
 
-func newEntryFilterQuery(filter core.EntryFilter) entryFilterQuery {
+func newEntryFilterQuery(filter model.EntryFilter) entryFilterQuery {
 	query := entryFilterQuery{}
 
 	if filter.FeedID != nil {
@@ -129,7 +129,7 @@ func (q *entryFilterQuery) add(condition string, args ...any) {
 	q.args = append(q.args, args...)
 }
 
-func (q entryFilterQuery) buildSelectEntries(filter core.EntryFilter) (string, []any) {
+func (q entryFilterQuery) buildSelectEntries(filter model.EntryFilter) (string, []any) {
 	query := `SELECT ` + entryColumns + ` FROM entries` + q.whereClause() + ` ORDER BY fetched_at DESC, id DESC`
 	args := q.cloneArgs()
 
@@ -161,12 +161,12 @@ func (q entryFilterQuery) cloneArgs() []any {
 }
 
 // SearchEntries performs full-text search using the FTS5 index.
-func (s *SQLiteStore) SearchEntries(ctx context.Context, query string, limit int) ([]*core.Entry, error) {
+func (s *SQLiteStore) SearchEntries(ctx context.Context, query string, limit int) ([]*model.Entry, error) {
 	return s.SearchEntriesPage(ctx, query, limit, 0)
 }
 
 // SearchEntriesPage performs paginated full-text search using the FTS5 index.
-func (s *SQLiteStore) SearchEntriesPage(ctx context.Context, query string, limit, offset int) ([]*core.Entry, error) {
+func (s *SQLiteStore) SearchEntriesPage(ctx context.Context, query string, limit, offset int) ([]*model.Entry, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -175,7 +175,7 @@ func (s *SQLiteStore) SearchEntriesPage(ctx context.Context, query string, limit
 		query, limit, offset,
 	)
 	if err != nil {
-		return nil, &core.StoreError{Op: "search", Table: "entries", Err: err}
+		return nil, &model.StoreError{Op: "search", Table: "entries", Err: err}
 	}
 	return collectEntries(rows)
 }
@@ -194,7 +194,7 @@ func (s *SQLiteStore) CountSearchEntries(ctx context.Context, query string) (int
 
 // FindDuplicateEntries returns entries from other feeds that share the same
 // link URL as the given entry.
-func (s *SQLiteStore) FindDuplicateEntries(ctx context.Context, entryID int64) ([]*core.Entry, error) {
+func (s *SQLiteStore) FindDuplicateEntries(ctx context.Context, entryID int64) ([]*model.Entry, error) {
 	rows, err := s.executor(ctx).QueryContext(ctx,
 		`SELECT `+entryColumns+` FROM entries WHERE link = (SELECT link FROM entries WHERE id = ?) AND id != ? AND link != ''`,
 		entryID, entryID,
@@ -205,10 +205,10 @@ func (s *SQLiteStore) FindDuplicateEntries(ctx context.Context, entryID int64) (
 	return collectEntries(rows)
 }
 
-func addEntriesEx(ctx context.Context, ex sqlExecutor, entries []*core.Entry) (int, error) {
+func addEntriesEx(ctx context.Context, ex sqlExecutor, entries []*model.Entry) (int, error) {
 	stmt, err := ex.PrepareContext(ctx, insertEntrySQL)
 	if err != nil {
-		return 0, &core.StoreError{Op: "add", Table: "entries", Err: err}
+		return 0, &model.StoreError{Op: "add", Table: "entries", Err: err}
 	}
 	defer func() { _ = stmt.Close() }()
 
@@ -224,7 +224,7 @@ func addEntriesEx(ctx context.Context, ex sqlExecutor, entries []*core.Entry) (i
 	return inserted, nil
 }
 
-func insertEntry(ctx context.Context, stmt *sql.Stmt, entry *core.Entry) (int, error) {
+func insertEntry(ctx context.Context, stmt *sql.Stmt, entry *model.Entry) (int, error) {
 	result, err := stmt.ExecContext(ctx,
 		entry.FeedID, entry.GUID, entry.Title, entry.Link, entry.Summary, formatNullableTime(entry.PublishedAt),
 		entry.Content, entry.Author, entry.ImageURL, string(entry.Categories), formatNullableTime(entry.UpdatedAt), string(entry.Enclosures),

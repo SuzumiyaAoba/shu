@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/core/fetch"
+	"github.com/SuzumiyaAoba/shu/model"
 )
 
 func TestFetchFeed(t *testing.T) {
@@ -171,8 +173,8 @@ func TestFetchAllWithObserver(t *testing.T) {
 	feed1, _ := svc.AddFeed(ctx, ts.URL+"/feed1.xml", "")
 	feed2, _ := svc.AddFeed(ctx, ts.URL+"/feed2.xml", "")
 
-	var events []core.FetchEvent
-	observer := core.FetchObserverFunc(func(event core.FetchEvent) {
+	var events []fetch.Event
+	observer := fetch.ObserverFunc(func(event fetch.Event) {
 		events = append(events, event)
 	})
 
@@ -188,9 +190,9 @@ func TestFetchAllWithObserver(t *testing.T) {
 	completed := map[int64]int{}
 	for _, event := range events {
 		switch event.Type {
-		case core.FetchEventStarted:
+		case fetch.EventStarted:
 			started[event.FeedID] = true
-		case core.FetchEventCompleted:
+		case fetch.EventCompleted:
 			completed[event.FeedID] = event.NewEntries
 		}
 	}
@@ -285,8 +287,8 @@ func TestFetchFeedWithObserverDisabled(t *testing.T) {
 		t.Fatalf("DisableFeed failed: %v", err)
 	}
 
-	var events []core.FetchEvent
-	observer := core.FetchObserverFunc(func(event core.FetchEvent) {
+	var events []fetch.Event
+	observer := fetch.ObserverFunc(func(event fetch.Event) {
 		events = append(events, event)
 	})
 
@@ -300,10 +302,10 @@ func TestFetchFeedWithObserverDisabled(t *testing.T) {
 	if len(events) != 2 {
 		t.Fatalf("got %d events, want 2", len(events))
 	}
-	if events[0].Type != core.FetchEventStarted {
-		t.Fatalf("first event = %q, want %q", events[0].Type, core.FetchEventStarted)
+	if events[0].Type != fetch.EventStarted {
+		t.Fatalf("first event = %q, want %q", events[0].Type, fetch.EventStarted)
 	}
-	if events[1].Type != core.FetchEventSkipped || events[1].SkipReason != core.FetchSkipDisabled {
+	if events[1].Type != fetch.EventSkipped || events[1].SkipReason != fetch.SkipDisabled {
 		t.Fatalf("second event = %+v, want skipped/disabled", events[1])
 	}
 }
@@ -330,8 +332,8 @@ func TestFetchFeedWithObserverNotModified(t *testing.T) {
 		t.Fatalf("initial FetchFeed failed: %v", err)
 	}
 
-	var events []core.FetchEvent
-	observer := core.FetchObserverFunc(func(event core.FetchEvent) {
+	var events []fetch.Event
+	observer := fetch.ObserverFunc(func(event fetch.Event) {
 		events = append(events, event)
 	})
 
@@ -345,10 +347,10 @@ func TestFetchFeedWithObserverNotModified(t *testing.T) {
 	if len(events) != 2 {
 		t.Fatalf("got %d events, want 2", len(events))
 	}
-	if events[0].Type != core.FetchEventStarted {
+	if events[0].Type != fetch.EventStarted {
 		t.Fatalf("first event = %+v, want started", events[0])
 	}
-	if events[1].Type != core.FetchEventSkipped || events[1].SkipReason != core.FetchSkipNotModified {
+	if events[1].Type != fetch.EventSkipped || events[1].SkipReason != fetch.SkipNotModified {
 		t.Fatalf("second event = %+v, want skipped/not_modified", events[1])
 	}
 }
@@ -367,7 +369,7 @@ func TestListEntries(t *testing.T) {
 	feed, _ := svc.AddFeed(ctx, ts.URL+"/feed.xml", "")
 	_, _ = svc.FetchFeed(ctx, feed.ID)
 
-	entries, err := svc.ListEntries(ctx, core.EntryFilter{Limit: 10})
+	entries, err := svc.ListEntries(ctx, model.EntryFilter{Limit: 10})
 	if err != nil {
 		t.Fatalf("ListEntries failed: %v", err)
 	}
@@ -592,7 +594,7 @@ func TestFetchFeedNotFound(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for non-existent feed")
 	}
-	if !errors.Is(err, core.ErrFeedNotFound) {
+	if !errors.Is(err, model.ErrFeedNotFound) {
 		t.Fatalf("expected ErrFeedNotFound, got %v", err)
 	}
 }

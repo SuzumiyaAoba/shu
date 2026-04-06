@@ -6,7 +6,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/core/fetch"
+	"github.com/SuzumiyaAoba/shu/model"
 	"github.com/spf13/cobra"
 )
 
@@ -117,7 +118,7 @@ func newFetchCmd(getService feedServiceGetter) *cobra.Command {
 
 			// Show a progress bar when stderr is a TTY and --quiet is not set.
 			quiet, _ := cmd.Root().PersistentFlags().GetBool("quiet")
-			var observer core.FetchObserver
+			var observer fetch.Observer
 			var progress *fetchProgress
 			if !quiet && isTTY(os.Stderr) {
 				feeds, err := svc.ListFeeds(ctx)
@@ -214,7 +215,7 @@ func newUpdateCmd(getService feedServiceGetter) *cobra.Command {
 		Short: "Update a feed's title, URL, or fetch interval",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			update := core.FeedUpdate{}
+			update := model.FeedUpdate{}
 			if cmd.Flags().Changed("title") {
 				update.Title = &updateTitle
 			}
@@ -292,7 +293,7 @@ func newRemoveDeadFeedsCmd(getService feedServiceGetter) *cobra.Command {
 				return err
 			}
 
-			var feeds []*core.Feed
+			var feeds []*model.Feed
 			if dryRun {
 				feeds, err = svc.ListDeadFeeds(cmd.Context())
 			} else {

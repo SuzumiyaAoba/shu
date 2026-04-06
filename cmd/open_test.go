@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SuzumiyaAoba/shu/core"
+	"github.com/SuzumiyaAoba/shu/model"
 	"github.com/spf13/cobra"
 )
 
 func TestOpenCmd(t *testing.T) {
 	service := &openTestService{
-		entry: &core.Entry{ID: 1, Link: "https://example.com/post-1"},
+		entry: &model.Entry{ID: 1, Link: "https://example.com/post-1"},
 	}
 
 	var openedURL string
@@ -42,7 +42,7 @@ func TestOpenCmd(t *testing.T) {
 
 func TestOpenCmdWarnsWhenMarkReadFails(t *testing.T) {
 	service := &openTestService{
-		entry:       &core.Entry{ID: 1, Link: "https://example.com/post-1"},
+		entry:       &model.Entry{ID: 1, Link: "https://example.com/post-1"},
 		markReadErr: errors.New("boom"),
 	}
 
@@ -62,7 +62,7 @@ func TestOpenCmdWarnsWhenMarkReadFails(t *testing.T) {
 
 func TestOpenCmdFailsWhenBrowserOpenFails(t *testing.T) {
 	service := &openTestService{
-		entry: &core.Entry{ID: 1, Link: "https://example.com/post-1"},
+		entry: &model.Entry{ID: 1, Link: "https://example.com/post-1"},
 	}
 
 	_, _, err := executeSingleCommand(newOpenCmd(func() (entryService, error) {
@@ -75,7 +75,7 @@ func TestOpenCmdFailsWhenBrowserOpenFails(t *testing.T) {
 
 func TestOpenCmdFailsWithoutLink(t *testing.T) {
 	service := &openTestService{
-		entry: &core.Entry{ID: 1},
+		entry: &model.Entry{ID: 1},
 	}
 
 	_, _, err := executeSingleCommand(newOpenCmd(func() (entryService, error) {
@@ -111,13 +111,13 @@ func executeSingleCommand(cmd *cobra.Command, args ...string) (string, string, e
 }
 
 type openTestService struct {
-	entry       *core.Entry
+	entry       *model.Entry
 	getEntryErr error
 	markReadErr error
 	markedRead  bool
 }
 
-func (s *openTestService) GetEntry(context.Context, int64) (*core.Entry, error) {
+func (s *openTestService) GetEntry(context.Context, int64) (*model.Entry, error) {
 	if s.getEntryErr != nil {
 		return nil, s.getEntryErr
 	}
@@ -129,23 +129,23 @@ func (s *openTestService) MarkEntryRead(context.Context, int64) error {
 	return s.markReadErr
 }
 
-func (s *openTestService) ListEntries(context.Context, core.EntryFilter) ([]*core.Entry, error) {
+func (s *openTestService) ListEntries(context.Context, model.EntryFilter) ([]*model.Entry, error) {
 	return nil, nil
 }
 
-func (s *openTestService) ListEntriesPage(context.Context, core.EntryFilter) (*core.EntryPage, error) {
+func (s *openTestService) ListEntriesPage(context.Context, model.EntryFilter) (*model.EntryPage, error) {
 	return nil, nil
 }
 
-func (s *openTestService) SearchEntries(context.Context, string, int) ([]*core.Entry, error) {
+func (s *openTestService) SearchEntries(context.Context, string, int) ([]*model.Entry, error) {
 	return nil, nil
 }
 
-func (s *openTestService) SearchEntriesPage(context.Context, string, int, int) (*core.EntryPage, error) {
+func (s *openTestService) SearchEntriesPage(context.Context, string, int, int) (*model.EntryPage, error) {
 	return nil, nil
 }
 
-func (s *openTestService) FindDuplicateEntries(context.Context, int64) ([]*core.Entry, error) {
+func (s *openTestService) FindDuplicateEntries(context.Context, int64) ([]*model.Entry, error) {
 	return nil, nil
 }
 
