@@ -46,7 +46,7 @@ func newAddCmd(getService feedServiceGetter) *cobra.Command {
 
 			feed, err := svc.AddFeed(cmd.Context(), args[0], addTitle)
 			if err != nil {
-				return err
+				return fmt.Errorf("add feed %q: %w", args[0], err)
 			}
 			if handled, err := output.encode(cmd.OutOrStdout(), feed); handled || err != nil {
 				return err
@@ -107,7 +107,7 @@ func newFetchCmd(getService feedServiceGetter) *cobra.Command {
 			if fetchFeedID > 0 {
 				entries, err := svc.FetchFeed(ctx, fetchFeedID)
 				if err != nil {
-					return err
+					return fmt.Errorf("fetch feed #%d: %w", fetchFeedID, err)
 				}
 				if handled, err := output.encode(cmd.OutOrStdout(), entries); handled || err != nil {
 					return err
@@ -184,7 +184,7 @@ func newDiscoverCmd(getService feedServiceGetter) *cobra.Command {
 			}
 			feeds, err := svc.DiscoverFeeds(cmd.Context(), args[0])
 			if err != nil {
-				return err
+				return fmt.Errorf("discover feeds at %q: %w", args[0], err)
 			}
 			return output.renderOrWrite(cmd.OutOrStdout(), feeds, func() error {
 				if len(feeds) == 0 {
