@@ -2,7 +2,6 @@ package core_test
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -38,7 +37,7 @@ func TestEntryMetadataHelpers(t *testing.T) {
 
 	entry := entries[0]
 
-	categories, err := entry.ParseCategories()
+	categories, err := model.ParseCategories(entry)
 	if err != nil {
 		t.Fatalf("ParseCategories failed: %v", err)
 	}
@@ -46,7 +45,7 @@ func TestEntryMetadataHelpers(t *testing.T) {
 		t.Fatalf("unexpected categories: %+v", categories)
 	}
 
-	authors, err := entry.ParseAuthors()
+	authors, err := model.ParseAuthors(entry)
 	if err != nil {
 		t.Fatalf("ParseAuthors failed: %v", err)
 	}
@@ -54,7 +53,7 @@ func TestEntryMetadataHelpers(t *testing.T) {
 		t.Fatalf("unexpected authors: %+v", authors)
 	}
 
-	links, err := entry.ParseLinks()
+	links, err := model.ParseLinks(entry)
 	if err != nil {
 		t.Fatalf("ParseLinks failed: %v", err)
 	}
@@ -62,7 +61,7 @@ func TestEntryMetadataHelpers(t *testing.T) {
 		t.Fatalf("unexpected links: %+v", links)
 	}
 
-	contributors, err := entry.ParseContributors()
+	contributors, err := model.ParseContributors(entry)
 	if err != nil {
 		t.Fatalf("ParseContributors failed: %v", err)
 	}
@@ -70,7 +69,7 @@ func TestEntryMetadataHelpers(t *testing.T) {
 		t.Fatalf("unexpected contributors: %+v", contributors)
 	}
 
-	source, err := entry.ParseSource()
+	source, err := model.ParseSource(entry)
 	if err != nil {
 		t.Fatalf("ParseSource failed: %v", err)
 	}
@@ -82,7 +81,7 @@ func TestEntryMetadataHelpers(t *testing.T) {
 func TestEntryMetadataHelpersEmptyValues(t *testing.T) {
 	entry := &model.Entry{}
 
-	categories, err := entry.ParseCategories()
+	categories, err := model.ParseCategories(entry)
 	if err != nil {
 		t.Fatalf("ParseCategories failed: %v", err)
 	}
@@ -90,52 +89,11 @@ func TestEntryMetadataHelpersEmptyValues(t *testing.T) {
 		t.Fatalf("expected empty categories, got %+v", categories)
 	}
 
-	source, err := entry.ParseSource()
+	source, err := model.ParseSource(entry)
 	if err != nil {
 		t.Fatalf("ParseSource failed: %v", err)
 	}
 	if source != nil {
 		t.Fatalf("expected nil source, got %+v", source)
-	}
-}
-
-func TestEntryMetadataHelpersUseCache(t *testing.T) {
-	entry := &model.Entry{
-		Categories: json.RawMessage(`[{"term":"go"}]`),
-		Source:     json.RawMessage(`{"title":"cached","id":"1","updated":"2026-01-01T00:00:00Z"}`),
-	}
-
-	categories, err := entry.ParseCategories()
-	if err != nil {
-		t.Fatalf("ParseCategories failed: %v", err)
-	}
-	if len(categories) != 1 {
-		t.Fatalf("unexpected categories: %+v", categories)
-	}
-
-	entry.Categories = json.RawMessage(`invalid json`)
-	categories, err = entry.ParseCategories()
-	if err != nil {
-		t.Fatalf("expected cached ParseCategories result, got error: %v", err)
-	}
-	if len(categories) != 1 || categories[0].Term != "go" {
-		t.Fatalf("unexpected cached categories: %+v", categories)
-	}
-
-	source, err := entry.ParseSource()
-	if err != nil {
-		t.Fatalf("ParseSource failed: %v", err)
-	}
-	if source == nil || source.Title != "cached" {
-		t.Fatalf("unexpected source: %+v", source)
-	}
-
-	entry.Source = json.RawMessage(`invalid json`)
-	source, err = entry.ParseSource()
-	if err != nil {
-		t.Fatalf("expected cached ParseSource result, got error: %v", err)
-	}
-	if source == nil || source.Title != "cached" {
-		t.Fatalf("unexpected cached source: %+v", source)
 	}
 }

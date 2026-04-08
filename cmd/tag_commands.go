@@ -25,7 +25,7 @@ func newTagCmd(getService tagServiceGetter) *cobra.Command {
 				return err
 			}
 			if err := svc.AddTag(cmd.Context(), id, args[1]); err != nil {
-				return err
+				return fmt.Errorf("tag feed #%d with %q: %w", id, args[1], err)
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Tagged feed #%d with %q\n", id, args[1])
 			return err
@@ -44,7 +44,7 @@ func newUntagCmd(getService tagServiceGetter) *cobra.Command {
 				return err
 			}
 			if err := svc.RemoveTag(cmd.Context(), id, args[1]); err != nil {
-				return err
+				return fmt.Errorf("untag feed #%d %q: %w", id, args[1], err)
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Removed tag %q from feed #%d\n", args[1], id)
 			return err

@@ -57,31 +57,19 @@ type OPMLOutline struct {
 	Outlines []OPMLOutline `xml:"outline,omitempty"`
 }
 
-type opmlFeedAdder interface {
-	AddFeed(ctx context.Context, url string, titleOverride string) (*model.Feed, error)
-	AddFeedDirect(ctx context.Context, feed *model.Feed) error
-}
-
-type opmlTagAdder interface {
-	AddTag(ctx context.Context, feedID int64, tagName string) error
-}
-
-// OPMLHandler owns OPML import/export workflows.
+// OPMLHandler owns OPML import/export workflows. It depends only on store
+// interfaces, not on manager types like FeedManager or TagManager.
 type OPMLHandler struct {
 	feedStore FeedStore
 	tagStore  TagStore
-	feeds     opmlFeedAdder
-	tags      opmlTagAdder
 	logger    *slog.Logger
 }
 
 // NewOPMLHandler creates an OPML domain service.
-func NewOPMLHandler(feedStore FeedStore, tagStore TagStore, feeds opmlFeedAdder, tags opmlTagAdder, logger *slog.Logger) *OPMLHandler {
+func NewOPMLHandler(feedStore FeedStore, tagStore TagStore, logger *slog.Logger) *OPMLHandler {
 	return &OPMLHandler{
 		feedStore: feedStore,
 		tagStore:  tagStore,
-		feeds:     feeds,
-		tags:      tags,
 		logger:    normalizeLogger(logger),
 	}
 }
@@ -247,9 +235,14 @@ func (i *opmlImporter) importOutline(ctx context.Context, outline OPMLOutline, p
 }
 
 func (i *opmlImporter) ensureFeed(ctx context.Context, url, title string) (*model.Feed, int, error) {
+	if url == "" {
+		return nil, 0, nil
+	}
+
 	feed := &model.Feed{URL: url, Title: title}
-	err := i.handler.feeds.AddFeedDirect(ctx, feed)
+	err := i.handler.feedStore.AddFeed(ctx, feed)
 	if err == nil {
+		i.handler.logger.With("feed_id", feed.ID, "feed_url", feed.URL).Info("feed added (OPML import)")
 		if i.result != nil {
 			i.result.AddedCount++
 		}
@@ -281,7 +274,7 @@ func (i *opmlImporter) ensureFeed(ctx context.Context, url, title string) (*mode
 
 func (i *opmlImporter) applyTags(ctx context.Context, feedID int64, feedURL string, tags []string) error {
 	for _, tag := range tags {
-		if err := i.handler.tags.AddTag(ctx, feedID, tag); err != nil {
+		if err := i.handler.tagStore.AddTag(ctx, feedID, tag); err != nil {
 			tagErr := fmt.Errorf("%w: tag OPML feed %s with %q: %v", model.ErrTagApplyFailed, feedURL, tag, err)
 			if i.result != nil {
 				i.result.Issues = append(i.result.Issues, OPMLImportIssue{

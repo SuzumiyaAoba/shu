@@ -132,8 +132,6 @@ type Entry struct {
 	// StarredAt records when the entry was bookmarked/starred.
 	// It is nil if the entry has not been starred.
 	StarredAt *time.Time `json:"starred_at"`
-
-	metadataCache EntryMetadataCache `json:"-"`
 }
 
 // EntryFilter specifies criteria for querying stored entries.

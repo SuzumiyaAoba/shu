@@ -309,7 +309,7 @@ func newSearchCmd(getService entryServiceGetter) *cobra.Command {
 
 			page, err := svc.SearchEntriesPage(cmd.Context(), query, pageFlags.Limit, offset)
 			if err != nil {
-				return err
+				return fmt.Errorf("search entries %q: %w", query, err)
 			}
 
 			nc := noColorFlag(cmd)
@@ -344,7 +344,7 @@ func newDuplicatesCmd(getService entryServiceGetter) *cobra.Command {
 
 			dupes, err := svc.FindDuplicateEntries(cmd.Context(), id)
 			if err != nil {
-				return err
+				return fmt.Errorf("find duplicates of entry #%d: %w", id, err)
 			}
 			return output.renderOrWrite(cmd.OutOrStdout(), dupes, func() error {
 				if len(dupes) == 0 {

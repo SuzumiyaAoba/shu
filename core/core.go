@@ -196,7 +196,7 @@ func New(store Store, logger *slog.Logger, options ...Option) *Service {
 		entries:     NewEntryQueries(store),
 		entryState:  NewEntryStateManager(store),
 		tags:        tags,
-		opml:        NewOPMLHandler(store, store, feeds, tags, logger),
+		opml:        NewOPMLHandler(store, store, logger),
 		maintenance: NewMaintenanceOps(store, store, logger),
 		discovery:   NewFeedDiscovery(client),
 	}

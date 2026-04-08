@@ -34,13 +34,13 @@ Run 'shu fetch' afterwards to download entries for the imported feeds.`,
 			}
 			f, err := os.Open(args[0])
 			if err != nil {
-				return fmt.Errorf("open file: %w", err)
+				return fmt.Errorf("open OPML file %q: %w", args[0], err)
 			}
 			defer func() { _ = f.Close() }()
 
 			result, err := svc.ImportOPMLDetailed(cmd.Context(), f)
 			if err != nil {
-				return err
+				return fmt.Errorf("import OPML %q: %w", args[0], err)
 			}
 			if handled, err := output.encode(cmd.OutOrStdout(), result); handled || err != nil {
 				return err
